@@ -33,11 +33,21 @@ def create_user(actor: Profile, body: UserCreate) -> UserOut:
     if actor.role == Role.SALES_MANAGER:
         manager_id = actor.id  # a manager's new executives always join their own team
 
-    attrs: dict = {"email": body.email, "email_confirm": True, "password": body.password}
-    phone = None
-    if body.phone:
-        _, phone = normalize_identifier(body.phone)
-        attrs.update(phone=phone, phone_confirm=True)
+    row = create_account(email=body.email, password=body.password, phone=body.phone, full_name=body.full_name,
+                         role=body.role, manager_id=manager_id)
+    write_audit(actor.id, "create", "profiles", row["id"], {"role": body.role.value})
+    return UserOut(**row)
+
+
+def create_account(*, email: str, password: str, phone: str | None, full_name: str, role: Role,
+                   manager_id: str | None = None, is_active: bool = True) -> dict:
+    """The sign-in account (Supabase Auth) and its profile, made together: if the profile fails, the sign-in account
+    is removed again so no one is left able to sign in without a profile. Used by "Add user" and by self sign-up."""
+    attrs: dict = {"email": email, "email_confirm": True, "password": password}
+    phone_e164 = None
+    if phone:
+        _, phone_e164 = normalize_identifier(phone)
+        attrs.update(phone=phone_e164, phone_confirm=True)
 
     db = get_service_client()
     try:
@@ -50,22 +60,11 @@ def create_user(actor: Profile, body: UserCreate) -> UserOut:
         raise AppError("Could not create the user.") from exc
 
     user_id = created.user.id
+    profile = {"id": user_id, "email": email, "phone": phone_e164, "full_name": full_name, "role": role.value, "manager_id": manager_id}
+    if not is_active:
+        profile["is_active"] = False
     try:
-        row = (
-            db.table("profiles")
-            .insert(
-                {
-                    "id": user_id,
-                    "email": body.email,
-                    "phone": phone,
-                    "full_name": body.full_name,
-                    "role": body.role.value,
-                    "manager_id": manager_id,
-                }
-            )
-            .execute()
-            .data[0]
-        )
+        row = db.table("profiles").insert(profile).execute().data[0]
     except Exception as exc:
         # Do not leave a login without a profile behind.
         try:
@@ -76,8 +75,7 @@ def create_user(actor: Profile, body: UserCreate) -> UserOut:
         raise AppError("Could not create the user.") from exc
 
     _users_changed()
-    write_audit(actor.id, "create", "profiles", user_id, {"role": body.role.value})
-    return UserOut(**row)
+    return row
 
 
 def list_users(actor: Profile) -> list[dict]:

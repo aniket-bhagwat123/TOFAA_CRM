@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     SINGLE_SESSION: bool = False
     SESSION_IDLE_MINUTES: int = 30
 
+    # Self sign-up (POST /auth/signup). Admin can never be chosen; roles above Sales Executive always need approval.
+    SIGNUP_ENABLED: bool = True
+    SIGNUP_REQUIRES_APPROVAL: bool = True  # new accounts stay inactive until an admin activates them in Users
+    SIGNUP_ALLOWED_DOMAINS: str = ""  # comma separated, e.g. "tofaa.in,tofaa.com"; empty = any email domain
+    SIGNUP_ALLOWED_ROLES: str = "sales_executive,sales_manager,finance,kam"  # roles a person may pick (admin is never allowed)
+
     # WhatsApp Business Cloud API (Meta). Empty token = click-to-chat fallback only.
     WHATSAPP_TOKEN: str = ""
     WHATSAPP_PHONE_NUMBER_ID: str = ""

@@ -1,9 +1,9 @@
 from fastapi import APIRouter
 
 from src.core.schema import ok
-from src.modules.auth import service
+from src.modules.auth import service, signup as signup_service
 from src.modules.auth.dependencies import ClaimsDep, CurrentUserDep
-from src.modules.auth.schemas import OtpRequest, PasswordChange, PasswordLogin, PasswordReset, RefreshRequest
+from src.modules.auth.schemas import OtpRequest, PasswordChange, PasswordLogin, PasswordReset, RefreshRequest, SignupRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -48,3 +48,10 @@ def change_password(body: PasswordChange, user: CurrentUserDep):
     """Set a new password while signed in (Profile screen). No code needed."""
     service.change_password(user.id, body.new_password)
     return ok(None, "Password updated.")
+
+
+@router.post("/signup", status_code=201)
+def signup(body: SignupRequest):
+    """Public. Creates an account in the chosen role (never admin); inactive until an admin approves it (see SIGNUP_* settings)."""
+    res = signup_service.signup(body)
+    return ok(res.model_dump(by_alias=True, exclude_none=True), res.message)

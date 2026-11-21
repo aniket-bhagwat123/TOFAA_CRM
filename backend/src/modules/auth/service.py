@@ -39,7 +39,7 @@ def _load_profile(user_id: str) -> Profile:
         raise UnauthorizedError("Profile not found.")
     row = res.data[0]
     if not row.get("is_active", True):
-        raise ForbiddenError("This account is disabled.")
+        raise ForbiddenError("This account is not active yet, or has been switched off. Ask your admin.")
     return Profile(
         **{k: row.get(k) for k in ("id", "email", "phone", "full_name", "role", "manager_id")},
         avatar_url=signed_url(AVATARS, row.get("avatar_path")),
