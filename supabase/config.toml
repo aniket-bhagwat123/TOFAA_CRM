@@ -1,0 +1,16 @@
+project_id = "tofaa-crm"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/reset-password"]

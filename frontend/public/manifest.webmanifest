@@ -1,0 +1,2 @@
+{ "name": "TOFAA CRM", "short_name": "TOFAA", "start_url": "/today", "display": "standalone",
+  "background_color": "#ffffff", "theme_color": "#0F4C75", "icons": [] }

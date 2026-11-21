@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: tofaa-crm-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run uvicorn src.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health/live
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: BACKEND_CORS_ORIGINS
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_JWT_ALGORITHM
+        value: HS256
+      - key: WHATSAPP_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated

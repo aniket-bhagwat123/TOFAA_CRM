@@ -1,0 +1,3 @@
+-- Local development seed. Create users via Supabase Auth, then add their profiles, e.g.:
+-- insert into public.profiles (id, email, full_name, role)
+-- values ('<auth user id>', 'owner@example.com', 'Owner', 'superadmin');
