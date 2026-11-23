@@ -38,18 +38,32 @@ def test_quote_numbers_are_short_and_versioned():
     assert service.quote_number("abcdef12-0000-0000-0000-000000000000", 3) == "Q-ABCDEF-V3"
 
 
-def test_item_validation():
-    ok = schemas.QuotationCreate.model_validate({"items": [{"description": "Hamper", "quantity": 10, "unitPrice": 250}], "discountPct": 5})
-    assert ok.discount_pct == D("5")
+def test_package_validation():
+    ok = schemas.QuotationCreate.model_validate({
+        "packages": [{"name": " CEO-level requirement ", "unitPrice": 10000, "quantity": 100,
+                      "items": [{"name": "book", "description": "Leather diary book"}, {"name": "Pen"}], "photos": ["lead-1/a.jpg"]}],
+    })
+    assert ok.packages[0].name == "CEO-level requirement"
+    assert not hasattr(ok, "discount_pct") and not hasattr(ok, "valid_days")  # no discount or validity any more
+    assert [i.name for i in ok.packages[0].items] == ["book", "Pen"]
+    pkg = {"name": "Gift", "unitPrice": 1, "quantity": 1}
     for bad in (
-        {"items": []},
-        {"items": [{"description": "x", "quantity": 0, "unitPrice": 1}]},
-        {"items": [{"description": "x", "quantity": 1, "unitPrice": -5}]},
-        {"items": [{"description": "x", "quantity": 1, "unitPrice": 1}], "discountPct": 101},
-        {"items": [{"description": " ", "quantity": 1, "unitPrice": 1}]} if False else {"items": [{"description": "", "quantity": 1, "unitPrice": 1}]},
+        {"packages": []},
+        {"packages": [{**pkg, "quantity": 0}]},
+        {"packages": [{**pkg, "unitPrice": -5}]},
+        {"packages": [{**pkg, "name": "   "}]},
+        {"packages": [{**pkg, "items": [{"name": ""}]}]},
     ):
         with pytest.raises(ValidationError):
             schemas.QuotationCreate.model_validate(bad)
+
+
+def test_photos_must_belong_to_the_lead():
+    good = schemas.PackageIn(name="A", unit_price=D("1"), quantity=D("1"), photos=["lead-1/x.jpg"])
+    service._check_photo_paths("lead-1", [good])
+    for path in ("lead-2/x.jpg", "lead-1/../lead-2/x.jpg"):
+        with pytest.raises(Exception):
+            service._check_photo_paths("lead-1", [schemas.PackageIn(name="A", unit_price=D("1"), quantity=D("1"), photos=[path])])
 
 
 def test_who_may_decide(monkeypatch):
@@ -62,10 +76,29 @@ def test_who_may_decide(monkeypatch):
 
 def test_the_pdf_renders_with_long_text_and_non_latin_characters():
     out = pdf.render(
-        number="Q-AB12CD-V1", created=date(2026, 11, 20), valid_days=15,
+        number="Q-AB12CD-V1", created=date(2026, 11, 20),
         lead={"company": {"name": "Momentum Tech — Solutions"}, "contact": {"name": "Maya Patel नमस्ते", "phone": "6505550842"}},
         items=[{"description": "Hamper " * 30, "quantity": 200, "unit_price": 2450}, {"description": "Delivery", "quantity": 1, "unit_price": 15000}],
         subtotal=505000, discount_pct=5, discount_amount=25250, total=479750,
         template={"intro": "Thank you.", "terms": "1. Prices in INR.", "footer": "Regards"}, notes="₹ amounts are final",
+    )
+    assert out.startswith(b"%PDF-") and len(out) > 1500
+
+
+def test_the_pdf_renders_requirement_packages_with_mockups():
+    from io import BytesIO
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (60, 40), (200, 30, 30)).save(buf, "PNG")
+    packages = [
+        {"name": "CEO-level requirement", "unit_price": 10000, "quantity": 100, "photo_paths": ["l/a.png", "l/missing.png"],
+         "items": [{"name": "book", "description": "Leather diary book"}, {"name": "Pen", "description": None}]},
+        {"name": "Staff kit", "unit_price": 500, "quantity": 400, "items": [], "photo_paths": []},
+    ]
+    out = pdf.render(
+        number="Q-AB12CD-V2", created=date(2026, 11, 20), lead={"company": {"name": "Apex"}, "contact": {"name": "Vikram"}},
+        items=[], packages=packages, photos={"l/a.png": buf.getvalue()}, subtotal=1200000, discount_pct=0, discount_amount=0, total=1200000,
+        template=None, notes=None,
     )
     assert out.startswith(b"%PDF-") and len(out) > 1500

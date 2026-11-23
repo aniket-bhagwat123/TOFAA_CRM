@@ -9,6 +9,7 @@ type Props = {
   onChange: (v: string) => void;
   placeholder?: string;
   rows?: number;
+  required?: boolean;
 };
 
 type Recognition = {
@@ -19,7 +20,7 @@ type Recognition = {
 };
 
 /** Note box with voice-to-text where the browser supports it (Chrome / Android / Safari). */
-export function VoiceTextarea({ label, value, onChange, placeholder, rows = 3 }: Props) {
+export function VoiceTextarea({ label, value, onChange, placeholder, rows = 3, required }: Props) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
   const rec = useRef<Recognition | null>(null);
@@ -55,7 +56,10 @@ export function VoiceTextarea({ label, value, onChange, placeholder, rows = 3 }:
 
   return (
     <label className="block space-y-1">
-      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <span className="text-sm font-medium text-slate-700">
+        {label}
+        {required && <span className="ml-0.5 font-semibold text-red-600" aria-hidden="true">*</span>}
+      </span>
       <div className="relative">
         <textarea
           rows={rows}

@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Megaphone, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, UserRound, Wallet } from "lucide-react";
+import { ArrowLeftRight, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Images, Megaphone, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, UserRound, Wallet } from "lucide-react";
 import type { Activity } from "@/types/crm";
 
 /** The icon and colour for each kind of activity, shared by every list that shows them. */
@@ -18,6 +18,7 @@ export function activityLook(a: Activity): { icon: typeof Phone; tone: string } 
     case "task": return { icon: CheckCircle2, tone: "bg-emerald-100 text-emerald-600" };
     case "client": return { icon: Building2, tone: "bg-violet-100 text-violet-600" };
     case "campaign": return { icon: Megaphone, tone: "bg-violet-100 text-violet-600" };
+    case "sample": return { icon: Images, tone: "bg-teal-100 text-teal-600" };
     case "import": return { icon: FileUp, tone: "bg-slate-100 text-slate-500" };
     default: return { icon: Plus, tone: "bg-violet-100 text-violet-600" };
   }

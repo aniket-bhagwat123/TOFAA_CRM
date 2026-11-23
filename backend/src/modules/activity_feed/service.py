@@ -11,7 +11,7 @@ from src.core.supabase import get_service_client
 from src.modules.auth.schemas import Profile
 
 PAGE = 30
-KINDS = {"call", "whatsapp", "meeting", "note", "stage_change", "reassign", "task", "created", "import", "mom", "quotation", "agreement", "payment", "client", "campaign"}
+KINDS = {"call", "whatsapp", "meeting", "note", "stage_change", "reassign", "task", "created", "import", "mom", "quotation", "agreement", "payment", "client", "campaign", "sample"}
 LEAD_EMBED = "lead:leads!inner(id,owner_id,pipeline,project_title,company_id,company:companies(name))"
 COMPANY_EMBED = "company:companies!inner(id,name,account_owner_id)"
 

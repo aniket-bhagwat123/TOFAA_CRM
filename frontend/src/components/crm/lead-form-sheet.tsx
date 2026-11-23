@@ -15,7 +15,6 @@ import { uploadPhoto } from "@/features/media/upload";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { errorData, fieldErrors, statusOf } from "@/lib/api-errors";
-import { BAND_LABEL } from "@/lib/format";
 import { apiClient, errorMessage } from "@/services/api-client";
 import type { DuplicateMatch, Lead, LeadMeta } from "@/types/crm";
 import { DuplicateBanner } from "./duplicate-banner";
@@ -115,7 +114,6 @@ export function LeadFormSheet({ open, onClose, onCreated }: Props) {
               <InputField label="Designation" {...register("designation")} />
               <InputField label="City" {...register("city")} />
             </div>
-            <SelectField label="Rough value" placeholder="Select" options={(meta.data?.valueBands ?? []).map((b) => ({ value: b, label: BAND_LABEL[b] ?? b }))} {...register("valueBand")} />
             <TextareaField label="Notes" {...register("notes")} />
           </div>
         )}

@@ -48,7 +48,10 @@ export function ImagePicker({ label, name, file, onChange, existingUrl, hint, sq
     <div className="space-y-2">
       <span className="text-sm font-medium text-slate-700">{label}</span>
       <div className="flex items-center gap-4">
-        <Avatar src={shown} name={name} size="xl" square={square} />
+        {/* the photo itself opens the picker too */}
+        <button type="button" onClick={() => input.current?.click()} disabled={busy} aria-label={shown ? "Change photo" : "Upload photo"} className={`pressable group relative shrink-0 disabled:opacity-60 ${square ? "rounded-xl" : "rounded-full"}`}>
+          <Avatar src={shown} name={name} size="xl" square={square} className="transition-shadow group-hover:ring-4 group-hover:ring-brand/15" />
+        </button>
         <div className="space-y-2">
           <input ref={input} type="file" accept={ACCEPT_ATTR} hidden onChange={(e) => void pick(e.target.files?.[0])} />
           <div className="flex flex-wrap gap-2">

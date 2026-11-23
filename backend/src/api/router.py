@@ -4,6 +4,7 @@ from src.modules.activities.router import router as activities_router
 from src.modules.activity_feed.router import router as activity_feed_router
 from src.modules.projects.router import router as projects_router
 from src.modules.agreements.router import router as agreements_router
+from src.modules.samples.router import router as samples_router
 from src.modules.auth.router import router as auth_router
 from src.modules.clients.router import router as clients_router
 from src.modules.deal.router import router as deal_router
@@ -39,6 +40,7 @@ api_router.include_router(stages_router)
 api_router.include_router(quotations_router)
 api_router.include_router(minutes_router)
 api_router.include_router(agreements_router)
+api_router.include_router(samples_router)
 api_router.include_router(payments_router)
 api_router.include_router(deal_router)
 api_router.include_router(clients_router)

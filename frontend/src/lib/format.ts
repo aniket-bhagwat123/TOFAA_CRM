@@ -8,6 +8,7 @@ export const STAGE_LABEL: Record<StageKey, string> = {
   meeting_scheduled: "Meeting Scheduled",
   requirement_received: "Requirement Received",
   quotation_sent: "Quotation Sent",
+  sampling: "Sampling",
   agreement_payment: "Agreement & Payment",
   closed_won: "Closed Won",
   closed_lost: "Closed Lost",
@@ -23,6 +24,7 @@ export const STAGE_TONE: Record<StageKey, string> = {
   meeting_scheduled: "bg-indigo-100 text-indigo-800",
   requirement_received: "bg-violet-100 text-violet-800",
   quotation_sent: "bg-amber-100 text-amber-800",
+  sampling: "bg-teal-100 text-teal-800",
   agreement_payment: "bg-orange-100 text-orange-800",
   closed_won: "bg-emerald-100 text-emerald-800",
   closed_lost: "bg-red-100 text-red-700",
@@ -40,12 +42,19 @@ export const BAND_LABEL: Record<string, string> = {
 };
 
 export const OUTCOME_LABEL: Record<string, string> = {
+  not_reachable: "Not reachable",
+  call_back_later: "Call back later",
+  future_requirement: "Future requirement",
+  interested: "Interested",
+  not_interested: "Not interested",
+  wrong_contact: "Wrong contact",
+  // names used before the call buttons changed (old timeline entries, until the migration renames them)
   connected: "Connected",
   no_answer: "No answer",
-  call_back_later: "Call back later",
-  not_interested: "Not interested",
   wrong_number: "Wrong number",
 };
+/** Lead tags set by call outcomes. */
+export const TAG_LABEL: Record<string, string> = { nurture: "Nurture" };
 
 /** Today in IST as YYYY-MM-DD (the CRM works in Indian time). */
 export function todayIso(offsetDays = 0): string {
@@ -102,7 +111,7 @@ export function istInputToIso(value: string): string {
 
 /** The stages of each pipeline, in order (the closed ones are shared). */
 export const PIPELINE_STAGES = {
-  new_business: ["new_lead", "connected", "meeting_scheduled", "requirement_received", "quotation_sent", "agreement_payment"],
+  new_business: ["new_lead", "connected", "meeting_scheduled", "requirement_received", "quotation_sent", "sampling", "agreement_payment"],
   client: ["project_follow_up", "project_meeting", "project_proposal", "project_negotiation"],
 } as const;
 

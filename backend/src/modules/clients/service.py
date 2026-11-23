@@ -463,19 +463,18 @@ def repeat_project(user: Profile, company_id: str, body: schemas.RepeatProject) 
     if not src or src[0]["company_id"] != company_id:
         raise NotFoundError("That project is not one of this client's.")
     src = src[0]
-    quotes = db.table("quotations").select("id,discount_pct,valid_days,notes,status").eq("lead_id", src["id"]).order("version", desc=True).limit(10).execute().data
+    quotes = db.table("quotations").select("id,notes,status").eq("lead_id", src["id"]).order("version", desc=True).limit(10).execute().data
     base = next((q for q in quotes if q["status"] == "sent"), quotes[0] if quotes else None)
     if not base:
         raise AppError("That project has no quotation to repeat. Create a new project instead.", status_code=422)
-    items = db.table("quotation_items").select("description,quantity,unit_price").eq("quotation_id", base["id"]).order("position").execute().data
     title = (body.title or "").strip() or f"{src.get('project_title') or 'Order'} (repeat)"
     project = create_project(user, company_id, schemas.ProjectCreate(title=title, occasion=body.occasion or src.get("occasion"), origin="outbound"))
     db.table("leads").update({"origin": "repeat"}).eq("id", project["id"]).execute()
     quote = quotations.create_quotation(
         user, project["id"],
         qschemas.QuotationCreate(
-            items=[qschemas.ItemIn(description=i["description"], quantity=Decimal(str(i["quantity"])), unit_price=Decimal(str(i["unit_price"]))) for i in items],
-            discount_pct=Decimal(str(base.get("discount_pct") or 0)), valid_days=base.get("valid_days") or 15, notes=base.get("notes"),
+            packages=quotations.copy_packages(base["id"], project["id"]),
+            notes=base.get("notes"),
         ),
     )
     return {"projectId": project["id"], "quotation": quote}

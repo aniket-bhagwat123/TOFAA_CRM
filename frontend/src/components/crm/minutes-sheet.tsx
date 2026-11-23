@@ -54,24 +54,21 @@ export function MinutesSheet({ target, onClose, onDone }: Props) {
   async function save() {
     if (!target) return;
     const e: Record<string, string> = {};
-    if (!note.trim() && !file) e.note = "Type the minutes or attach a file";
-    if (!occasion.trim()) e.occasion = "Occasion is required";
-    if (!(Number(quantity) > 0)) e.quantity = quantity ? "Quantity must be greater than 0" : "Quantity is required";
-    if (!(Number(budget) > 0)) e.budget = budget ? "Budget must be greater than 0" : "Budget is required";
-    if (!delivery) e.deliveryDate = "Delivery date is required";
-    if (!follow) e.nextFollowUp = "Pick the next follow-up date";
+    if (!note.trim()) e.note = "Summary is required";
+    if (quantity && !(Number(quantity) > 0)) e.quantity = "Quantity must be greater than 0";
+    if (budget && !(Number(budget) > 0)) e.budget = "Budget must be greater than 0";
     setErrors(e);
     if (Object.keys(e).length) return;
 
     setBusy(true);
     try {
       const form = new FormData();
-      form.append("occasion", occasion.trim());
-      form.append("quantity", quantity);
-      form.append("budget", budget);
-      form.append("deliveryDate", delivery);
-      form.append("nextFollowUp", follow);
-      if (note.trim()) form.append("note", note.trim());
+      form.append("note", note.trim());
+      if (occasion.trim()) form.append("occasion", occasion.trim());
+      if (quantity) form.append("quantity", quantity);
+      if (budget) form.append("budget", budget);
+      if (delivery) form.append("deliveryDate", delivery);
+      if (follow) form.append("nextFollowUp", follow);
       if (file) form.append("file", file);
       await apiClient.post(`/leads/${target.leadId}/minutes`, form, { timeout: 60000 });
       toast.success("Minutes saved. Moved to Requirement Received.");
@@ -88,20 +85,20 @@ export function MinutesSheet({ target, onClose, onDone }: Props) {
   return (
     <Sheet open={!!target} title="Minutes of meeting" subtitle={target?.name} icon={NotebookPen} tone="indigo" onClose={onClose} width="lg">
       <div className="space-y-4">
-        <VoiceTextarea label="Minutes" value={note} onChange={(v) => { setNote(v); clear("note"); }} rows={4} placeholder="Write the minutes" />
+        <VoiceTextarea label="Summary" required value={note} onChange={(v) => { setNote(v); clear("note"); }} rows={4} placeholder="Write the summary" />
         {errors.note && <p role="alert" className="-mt-2 text-xs font-medium text-red-600">{errors.note}</p>}
-        <DocumentPicker label="Or attach the minutes (optional if typed)" file={file} onChange={(f) => { setFile(f); clear("note"); }} />
+        <DocumentPicker label="Attach the minutes (optional)" file={file} onChange={setFile} />
 
         <div className="border-t border-slate-100 pt-4">
           <h3 className="mb-3 text-sm font-semibold text-slate-700">What the client needs</h3>
           <div className="grid gap-4 sm:grid-cols-2">
-            <InputField label="Occasion" required value={occasion} onChange={(e) => { setOccasion(e.target.value); clear("occasion"); }} error={errors.occasion} />
-            <DatePicker label="Delivery date" required min={todayIso()} value={delivery} onChange={(d) => { setDelivery(d); clear("deliveryDate"); }} error={errors.deliveryDate} />
-            <InputField label="Quantity" type="number" integer required value={quantity} onChange={(e) => { setQuantity(e.target.value); clear("quantity"); }} error={errors.quantity} />
-            <InputField label="Budget (₹)" type="number" required value={budget} onChange={(e) => { setBudget(e.target.value); clear("budget"); }} error={errors.budget} />
+            <InputField label="Occasion" value={occasion} onChange={(e) => { setOccasion(e.target.value); clear("occasion"); }} error={errors.occasion} />
+            <DatePicker label="Delivery date" min={todayIso()} value={delivery} onChange={(d) => { setDelivery(d); clear("deliveryDate"); }} error={errors.deliveryDate} />
+            <InputField label="Quantity" type="number" integer value={quantity} onChange={(e) => { setQuantity(e.target.value); clear("quantity"); }} error={errors.quantity} />
+            <InputField label="Budget (₹)" type="number" value={budget} onChange={(e) => { setBudget(e.target.value); clear("budget"); }} error={errors.budget} />
           </div>
         </div>
-        <DateChips label="Next follow-up" required value={follow} onChange={(d) => { setFollow(d); clear("nextFollowUp"); }} error={errors.nextFollowUp} />
+        <DateChips label="Next follow-up" value={follow} onChange={(d) => { setFollow(d); clear("nextFollowUp"); }} error={errors.nextFollowUp} />
         <Button onClick={save} loading={busy} className="w-full">Save minutes</Button>
       </div>
     </Sheet>

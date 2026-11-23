@@ -1,4 +1,4 @@
-"""Fixed pipeline: 7 columns, where the last one holds both Won and Lost. No custom workflows in v1."""
+"""Fixed pipeline: 8 columns, where the last one holds both Won and Lost. No custom workflows in v1."""
 
 STAGES = [
     "new_lead",
@@ -6,6 +6,7 @@ STAGES = [
     "meeting_scheduled",
     "requirement_received",
     "quotation_sent",
+    "sampling",
     "agreement_payment",
     "closed_won",
     "closed_lost",
@@ -29,7 +30,7 @@ REQUIRED_INPUTS: dict[str, list[str]] = {
 NUMERIC_INPUTS = {"quantity", "budget"}
 
 SOURCES = ["Referral", "Website", "Instagram", "LinkedIn", "Cold call", "Exhibition", "WhatsApp", "Existing client", "Other"]
-LOST_REASONS = ["Price too high", "Chose competitor", "No budget", "No response", "Not a fit", "Postponed", "Other"]
+LOST_REASONS = ["Price too high", "Chose competitor", "No budget", "No response", "Not a fit", "Postponed", "Invalid contact", "Other"]
 VALUE_BANDS = ["under_1l", "1_5l", "5_20l", "20l_plus"]
 
 
@@ -60,7 +61,8 @@ def moves_forward(current: str, target: str) -> bool:
 PREREQUISITES: dict[str, tuple[str, str, str | None, str, str]] = {
     "requirement_received": ("moms", "id", None, "mom", "Add the meeting minutes to move here."),
     "quotation_sent": ("quotations", "status", "sent", "quotation", "Send a quotation to move here."),
-    "agreement_payment": ("agreements", "signed_at", None, "agreement", "Upload the signed agreement to move here."),
+    "sampling": ("sample_sends", "id", None, "samples", "Send the samples to the client to move here."),
+    "agreement_payment": ("agreements", "prepared_at", None, "agreement", "Prepare the agreement to move here."),
 }
 PREREQUISITES.update({
     "project_meeting": ("meetings", "status", "scheduled", "meeting", "Create a meeting (date, time, type) to move here."),

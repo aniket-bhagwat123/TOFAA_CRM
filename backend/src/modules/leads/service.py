@@ -1,3 +1,5 @@
+import logging
+import re
 from uuid import uuid4
 
 from src.core import cache
@@ -34,6 +36,7 @@ from src.modules.leads.stages import (
 from src.modules.leads.value import deal_value, value_source
 from src.modules.tasks import service as tasks
 
+log = logging.getLogger(__name__)
 LEAD_SELECT = (
     "*, company:companies(id,name,kind,city,client_since), contact:contacts(*),"
     " owner:profiles!owner_id(id,full_name)"
@@ -64,14 +67,27 @@ def _owner_ids_for(user: Profile, owner_id: str | None) -> list[str] | None:
     return visible
 
 
-def _matching_company_ids(term: str) -> list[str]:
+def _search_words(term: str) -> list[str]:
+    """Each word of the search, without the characters PostgREST filters treat specially."""
+    return re.sub(r"[%,()*\\]", " ", term).split()[:6]
+
+
+def _matching_ids(term: str) -> tuple[list[str], list[str]]:
+    """(companies whose name matches, contacts whose name matches). Every word must appear, in any order, so
+    "Logistics 1" finds "Vanguard Logistics Pvt. Ltd 1" and "mane pankaj" finds "Pankaj Mane"."""
+    words = _search_words(term)
+    if not words:
+        return [], []
     db = get_service_client()
-    like = f"%{term.strip()}%"
-    by_company, by_contact = par(
-        lambda: db.table("companies").select("id").ilike("name", like).limit(300).execute().data,
-        lambda: db.table("contacts").select("company_id").ilike("name", like).limit(300).execute().data,
-    )
-    return list({r["id"] for r in by_company} | {r["company_id"] for r in by_contact})
+
+    def by_words(table: str):
+        q = db.table(table).select("id")
+        for w in words:
+            q = q.ilike("name", f"%{w}%")
+        return q.limit(300).execute().data
+
+    companies, contacts = par(lambda: by_words("companies"), lambda: by_words("contacts"))
+    return [r["id"] for r in companies], [r["id"] for r in contacts]
 
 
 def meta() -> dict:
@@ -217,7 +233,36 @@ def create_lead(user: Profile, body: schemas.LeadCreate) -> dict:
     }
 
 
-def _lead_filters(q, user: Profile, *, stage, overdue, source, owner_id, search, pipeline="new_business", company_id=None, occasion=None, origin=None):
+CALL_OUTCOMES = {"not_reachable", "call_back_later", "future_requirement", "interested", "not_interested", "wrong_contact"}
+TAGS = {"nurture"}
+
+
+def _call_outcome_filter(q, value: str):
+    """Comma list of last-call outcomes; 'none' means the lead has never had a call logged."""
+    wanted = [v for v in value.split(",") if v in CALL_OUTCOMES]
+    never = "none" in value.split(",")
+    if never and wanted:
+        return q.or_(f"last_call_outcome.is.null,last_call_outcome.in.({','.join(wanted)})")
+    if never:
+        return q.is_("last_call_outcome", "null")
+    return q.in_("last_call_outcome", wanted or ["-"])
+
+
+LAST_CALL_NOT_READY = "The Call status filter is not set up yet. An admin needs to apply the database migration 20260107000000_lead_last_call.sql, then try again."
+
+
+def _run_filtered(run, call_outcome, tag=None):
+    try:
+        return run()
+    except Exception as exc:
+        if call_outcome and "last_call_outcome" in str(exc):
+            raise AppError(LAST_CALL_NOT_READY, status_code=503) from exc
+        if tag and "tags" in str(exc):
+            raise AppError("The tag filter is not set up yet. An admin needs to apply the database migration 20260112000000_call_outcomes_v2.sql, then try again.", status_code=503) from exc
+        raise
+
+
+def _lead_filters(q, user: Profile, *, stage, overdue, source, owner_id, search, pipeline="new_business", company_id=None, occasion=None, origin=None, call_outcome=None, tag=None):
     q = q.eq("pipeline", pipeline if pipeline in STAGES_FOR else "new_business")  # Leads and Pipeline show one pipeline at a time
     owners = _owner_ids_for(user, owner_id)
     if owners is not None:
@@ -232,38 +277,44 @@ def _lead_filters(q, user: Profile, *, stage, overdue, source, owner_id, search,
         q = q.eq("occasion", occasion)
     if origin:
         q = q.eq("origin", origin)
+    if call_outcome:
+        q = _call_outcome_filter(q, call_outcome)
+    if tag:
+        q = q.contains("tags", [tag if tag in TAGS else "-"])
     if overdue:
         q = q.lt("next_follow_up", today_ist().isoformat()).not_.in_("stage", list(CLOSED))
     if search and search.strip():
-        ids = _matching_company_ids(search)
-        q = q.in_("company_id", ids or ["00000000-0000-0000-0000-000000000000"])
+        # A company-name match shows all that company's leads; a contact-name match only that person's leads.
+        companies, contacts = _matching_ids(search)
+        clauses = ([f"company_id.in.({','.join(companies)})"] if companies else []) + ([f"contact_id.in.({','.join(contacts)})"] if contacts else [])
+        q = q.or_(",".join(clauses)) if clauses else q.eq("company_id", "00000000-0000-0000-0000-000000000000")
     return q
 
 
-def list_leads(user: Profile, page: PageParams, *, stage=None, overdue=False, source=None, owner_id=None, pipeline="new_business", company_id=None, occasion=None, origin=None) -> dict:
+def list_leads(user: Profile, page: PageParams, *, stage=None, overdue=False, source=None, owner_id=None, pipeline="new_business", company_id=None, occasion=None, origin=None, call_outcome=None, tag=None) -> dict:
     require_lead_role(user)
-    params = {"page": page.page, "limit": page.limit, "search": page.search, "sort": page.sort, "stage": stage, "overdue": overdue, "source": source, "owner": owner_id, "pipeline": pipeline, "c": company_id, "oc": occasion, "or": origin}
+    params = {"page": page.page, "limit": page.limit, "search": page.search, "sort": page.sort, "stage": stage, "overdue": overdue, "source": source, "owner": owner_id, "pipeline": pipeline, "c": company_id, "oc": occasion, "or": origin, "co": call_outcome, "tg": tag}
 
     def load() -> dict:
         col, desc = parse_sort(page.sort, SORTABLE, "last_activity_at")
         q = get_service_client().table("leads").select(LEAD_SELECT, count="exact")
-        q = _lead_filters(q, user, stage=stage, overdue=overdue, source=source, owner_id=owner_id, search=page.search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin)
-        res = q.order(col, desc=desc).range(page.start, page.end).execute()
+        q = _lead_filters(q, user, stage=stage, overdue=overdue, source=source, owner_id=owner_id, search=page.search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin, call_outcome=call_outcome, tag=tag)
+        res = _run_filtered(lambda: q.order(col, desc=desc).range(page.start, page.end).execute(), call_outcome, tag)
         return {"items": attach_photos(res.data), "meta": page_meta(page, res.count or 0)}
 
     return cache.memo("leads", user.id, params, VIEW_TTL, load)
 
 
-def board(user: Profile, *, overdue=False, source=None, owner_id=None, search=None, pipeline="new_business", company_id=None, occasion=None, origin=None) -> list[dict]:
+def board(user: Profile, *, overdue=False, source=None, owner_id=None, search=None, pipeline="new_business", company_id=None, occasion=None, origin=None, call_outcome=None, tag=None) -> list[dict]:
     """All leads for the Kanban board (capped at 500), newest activity first."""
     require_lead_role(user)
 
     def load() -> list[dict]:
         q = get_service_client().table("leads").select(LEAD_SELECT)
-        q = _lead_filters(q, user, stage=None, overdue=overdue, source=source, owner_id=owner_id, search=search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin)
-        return attach_photos(q.order("last_activity_at", desc=True).limit(500).execute().data)
+        q = _lead_filters(q, user, stage=None, overdue=overdue, source=source, owner_id=owner_id, search=search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin, call_outcome=call_outcome, tag=tag)
+        return attach_photos(_run_filtered(lambda: q.order("last_activity_at", desc=True).limit(500).execute(), call_outcome, tag).data)
 
-    return cache.memo("board", user.id, {"o": overdue, "s": source, "w": owner_id, "q": search, "p": pipeline, "c": company_id, "oc": occasion, "or": origin}, VIEW_TTL, load)
+    return cache.memo("board", user.id, {"o": overdue, "s": source, "w": owner_id, "q": search, "p": pipeline, "c": company_id, "oc": occasion, "or": origin, "co": call_outcome, "tg": tag}, VIEW_TTL, load)
 
 
 def get_lead_detail(user: Profile, lead_id: str) -> dict:
@@ -419,11 +470,19 @@ def move_stage(user: Profile, lead_id: str, body: schemas.StageMove) -> dict:
     if target == "closed_lost":
         patch["lost_reason"] = body.lost_reason
         patch["closed_at"] = now_ist().isoformat()
+        if "nurture" in (lead.get("tags") or []):
+            patch["tags"] = [t for t in lead["tags"] if t != "nurture"]  # a lost lead is not being nurtured
     elif is_closed(current):
         patch["lost_reason"] = None  # reopened
         patch["closed_at"] = None
     if target == "requirement_received" and requirement.get("budget"):
         patch["estimate_amount"] = float(requirement["budget"])  # the deal value now has an estimate
+    if target == "new_lead":
+        # Back to New Lead starts the calling over, like a freshly created lead: "Not called yet".
+        patch["last_call_outcome"] = None
+        patch["last_call_at"] = None
+        if "nurture" in (lead.get("tags") or []):
+            patch["tags"] = [t for t in lead["tags"] if t != "nurture"]
     db = get_service_client()
     par(
         lambda: db.table("leads").update(patch).eq("id", lead_id).execute(),
@@ -483,9 +542,61 @@ def attach_photos(rows: list[dict]) -> list[dict]:
         if contact is not None:
             url = urls.get(contact.get("photo_path") or "")
             # Only the fields the app needs (the row has internal duplicate-check keys too).
-            r["contact"] = {k: contact.get(k) for k in ("id", "name", "designation", "phone", "email")} | {"photo_url": url}
+            r["contact"] = {k: contact.get(k) for k in ("id", "name", "designation", "phone", "alt_phone", "alt_name", "email")} | {"photo_url": url}
         r["deal_value"] = deal_value(r)
         r["value_source"] = value_source(r)
+    _attach_alt_names(rows)
+    return _attach_last_call(rows)
+
+
+def _attach_alt_names(rows: list[dict]) -> None:
+    """Until migration 20260109000000_contact_alt_name.sql adds contacts.alt_name, take whose the second number
+    is from the call that changed the number (its meta keeps the old name)."""
+    need = [r for r in rows if (r.get("contact") or {}).get("alt_phone") and not r["contact"].get("alt_name")]
+    if not need:
+        return
+    try:
+        calls = (
+            get_service_client().table("activities").select("lead_id,meta,created_at").eq("kind", "call")
+            .in_("lead_id", [r["id"] for r in need[:100]]).order("created_at", desc=True).limit(1000).execute().data
+        )
+    except Exception:  # noqa: BLE001 - a missing name must never break the list
+        log.warning("could not read the old contact names", exc_info=True)
+        return
+    old: dict[str, str] = {}
+    for c in calls:
+        meta = c.get("meta") or {}
+        if meta.get("newPhone") and c["lead_id"] not in old:
+            old[c["lead_id"]] = meta.get("oldName") or ""
+    for r in need:
+        if old.get(r["id"]):
+            r["contact"]["alt_name"] = old[r["id"]]
+
+
+def _attach_last_call(rows: list[dict]) -> list[dict]:
+    """Until migration 20260107000000_lead_last_call.sql adds leads.last_call_outcome, work the latest call
+    outcome out from the call history, so the cards and the table still show it."""
+    if not rows or "last_call_outcome" in rows[0]:
+        return rows  # the column exists: it is kept up to date when a call is logged
+    latest: dict[str, dict] = {}
+    db = get_service_client()
+    ids = [r["id"] for r in rows]
+    for i in range(0, len(ids), 100):
+        try:
+            calls = (
+                db.table("activities").select("lead_id,outcome,created_at,meta").eq("kind", "call").in_("lead_id", ids[i : i + 100])
+                .order("created_at", desc=True).limit(2000).execute().data
+            )
+        except Exception:  # noqa: BLE001 - a missing badge must never break the list
+            log.warning("could not read call history for the call status", exc_info=True)
+            continue
+        for c in calls:
+            latest.setdefault(c["lead_id"], c)  # newest first, so the first one seen is the latest
+    for r in rows:
+        c = latest.get(r["id"])
+        fresh = c and not (c.get("meta") or {}).get("newPhone")  # a changed number has not been called yet
+        r["last_call_outcome"] = c["outcome"] if fresh else None
+        r["last_call_at"] = c["created_at"] if fresh else None
     return rows
 
 

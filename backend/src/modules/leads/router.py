@@ -35,8 +35,10 @@ def board(
     company_id: Annotated[str | None, Query(alias="companyId")] = None,
     occasion: str | None = None,
     origin: str | None = None,
+    call_outcome: Annotated[str | None, Query(alias="callOutcome")] = None,
+    tag: str | None = None,
 ):
-    return ok(service.board(user, overdue=overdue, source=source, owner_id=owner_id, search=search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin))
+    return ok(service.board(user, overdue=overdue, source=source, owner_id=owner_id, search=search, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin, call_outcome=call_outcome, tag=tag))
 
 
 @router.get("")
@@ -51,8 +53,10 @@ def list_leads(
     company_id: Annotated[str | None, Query(alias="companyId")] = None,
     occasion: str | None = None,
     origin: str | None = None,
+    call_outcome: Annotated[str | None, Query(alias="callOutcome")] = None,
+    tag: str | None = None,
 ):
-    return ok(service.list_leads(user, page, stage=stage, overdue=overdue, source=source, owner_id=owner_id, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin))
+    return ok(service.list_leads(user, page, stage=stage, overdue=overdue, source=source, owner_id=owner_id, pipeline=pipeline, company_id=company_id, occasion=occasion, origin=origin, call_outcome=call_outcome, tag=tag))
 
 
 @router.post("", status_code=201)

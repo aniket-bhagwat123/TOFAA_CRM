@@ -1,6 +1,6 @@
 "use client";
-import { FileText, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Box, Boxes, FileText, ImageIcon, Layers, Loader2, Plus, Trash2, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { InputField, TextareaField } from "@/components/ui/input-field";
@@ -11,40 +11,90 @@ import { fieldErrors } from "@/lib/api-errors";
 import { inr, quoteTotals } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
-import type { DealData, Quotation, QuotationTemplate } from "@/types/crm";
+import type { DealData, Quotation, QuotationPhoto, QuotationTemplate } from "@/types/crm";
 import type { LeadTarget } from "./types";
 
-// Sr. | Description | Qty | Price | Amount (hidden on phones) | remove
-const ITEM_GRID = "grid grid-cols-[2rem_minmax(0,1fr)_4.25rem_5.75rem_2rem] items-center gap-2 px-3 sm:grid-cols-[2.25rem_minmax(0,1fr)_5.5rem_7.5rem_7rem_2rem]";
-// Inputs inside the table are compact, so the rows read as a table and not a stack of forms.
-const CELL = "h-9 rounded-lg px-2.5 py-1.5 sm:text-sm";
+const MAX_PACKAGES = 20;
+const MAX_ITEMS = 50;
+export const MAX_PACKAGE_PHOTOS = 10;
+const MAX_PHOTOS = MAX_PACKAGE_PHOTOS;
+export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
-type Row = { description: string; quantity: string; unitPrice: string };
-const blank = (): Row => ({ description: "", quantity: "1", unitPrice: "" });
+// Inputs inside a package are compact, so a package reads as one card and not a stack of forms.
+const CELL = "h-9 rounded-lg px-2.5 py-1.5 sm:text-sm";
+const SMALL_LABEL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500";
+export const OUTLINE_BTN =
+  "pressable inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-brand/40 hover:text-brand disabled:opacity-40";
+
+export type ItemDraft = { name: string; description: string };
+export type PackageDraft = { key: number; name: string; unitPrice: string; quantity: string; items: ItemDraft[]; photos: QuotationPhoto[]; uploading: number };
+
+let nextKey = 1;
+export const blankItem = (): ItemDraft => ({ name: "", description: "" });
+export const blankPackage = (): PackageDraft => ({ key: nextKey++, name: "", unitPrice: "", quantity: "", items: [blankItem()], photos: [], uploading: 0 });
+
+/** Packages as the API stores them (an agreement's, for example) turned back into drafts. */
+export function fromPackages(list: { name: string; unitPrice?: number; unit_price?: number; quantity: number; items?: { name: string; description?: string | null }[]; photos?: QuotationPhoto[] }[]): PackageDraft[] {
+  return list.map((p) => ({
+    key: nextKey++, name: p.name, unitPrice: String(p.unitPrice ?? p.unit_price ?? ""), quantity: String(p.quantity),
+    items: p.items?.length ? p.items.map((i) => ({ name: i.name, description: i.description ?? "" })) : [blankItem()],
+    photos: p.photos ?? [], uploading: 0,
+  }));
+}
+
+/** Checks the packages the way the quotation does. Returns field errors keyed `pkg-<key>`. */
+export function packageErrors(packages: PackageDraft[]): Record<string, string> {
+  const e: Record<string, string> = {};
+  packages.forEach((p, n) => {
+    const label = `Requirement ${n + 1}`;
+    const items = p.items.filter((i) => i.name.trim() || i.description.trim());
+    if (!p.name.trim()) e[`pkg-${p.key}`] = `${label} needs a name`;
+    else if (p.unitPrice === "" || Number(p.unitPrice) < 0) e[`pkg-${p.key}`] = `${label} needs a rate per unit`;
+    else if (!(Number(p.quantity) > 0)) e[`pkg-${p.key}`] = `${label}: quantity must be greater than 0`;
+    else if (items.some((i) => !i.name.trim())) e[`pkg-${p.key}`] = `${label}: every item needs a name`;
+  });
+  return e;
+}
+
+/** Packages in the shape the API takes. */
+export const packagesPayload = (packages: PackageDraft[]) =>
+  packages.map((p) => ({
+    name: p.name.trim(), unitPrice: Number(p.unitPrice), quantity: Number(p.quantity),
+    items: p.items.filter((i) => i.name.trim()).map((i) => ({ name: i.name.trim(), description: i.description.trim() || null })),
+    photos: p.photos.map((x) => x.path),
+  }));
+
+/** A revision starts from the latest version. A version made from flat line items becomes one package per line. */
+export function fromQuotation(q: Quotation): PackageDraft[] {
+  if (q.packages?.length) {
+    return q.packages.map((p) => ({
+      key: nextKey++, name: p.name, unitPrice: String(p.unitPrice), quantity: String(p.quantity),
+      items: p.items.length ? p.items.map((i) => ({ name: i.name, description: i.description ?? "" })) : [blankItem()],
+      photos: p.photos, uploading: 0,
+    }));
+  }
+  return q.items.map((i) => ({ key: nextKey++, name: i.description, unitPrice: String(i.unitPrice), quantity: String(i.quantity), items: [blankItem()], photos: [], uploading: 0 }));
+}
 
 type Props = { target: LeadTarget | null; onClose: () => void; onDone: () => void; onCreated: (q: Quotation) => void };
 
-/** Build a quotation from line items. Creating a new one after a version exists starts from that version (a revision). */
+/** Build a quotation from client requirement packages. Creating a new one after a version exists starts from that version (a revision). */
 export function QuotationSheet({ target, onClose, onDone, onCreated }: Props) {
   const deal = useApi<DealData>(target ? `/leads/${target.leadId}/deal` : null);
   const templates = useApi<QuotationTemplate[]>(target ? "/quotation-templates" : null);
-  const [rows, setRows] = useState<Row[]>([blank()]);
-  const [discount, setDiscount] = useState("");
-  const [validDays, setValidDays] = useState("15");
+  const [packages, setPackages] = useState<PackageDraft[]>(() => [blankPackage()]);
   const [templateId, setTemplateId] = useState("");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const latest = deal.data?.quotations[0];
-  const limit = deal.data?.discountLimit ?? 0;
 
-  // A revision starts from the latest version.
   useEffect(() => {
     if (!target || !latest) return;
-    setRows(latest.items.map((i) => ({ description: i.description, quantity: String(i.quantity), unitPrice: String(i.unitPrice) })));
-    setDiscount(latest.discountPct ? String(latest.discountPct) : "");
-    setValidDays(String(latest.validDays));
+    const drafts = fromQuotation(latest);
+    setPackages(drafts.length ? drafts : [blankPackage()]);
     setNotes(latest.notes ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [latest?.id, !!target]);
@@ -55,39 +105,77 @@ export function QuotationSheet({ target, onClose, onDone, onCreated }: Props) {
 
   useEffect(() => {
     if (target) return;
-    setRows([blank()]); setDiscount(""); setValidDays("15"); setNotes(""); setErrors({});
+    setPackages([blankPackage()]); setNotes(""); setErrors({});
   }, [target]);
 
-  const totals = quoteTotals(rows, discount);
-  const pct = Number(discount) || 0;
-  const over = pct > limit;
-  const setRow = (i: number, patch: Partial<Row>) => { setRows((r) => r.map((x, n) => (n === i ? { ...x, ...patch } : x))); setErrors((e) => ({ ...e, items: "" })); };
+  const totals = quoteTotals(packages, "0");
+  const uploading = packages.some((p) => p.uploading > 0);
+
+  const patchPackage = (key: number, patch: (p: PackageDraft) => Partial<PackageDraft>) => {
+    setPackages((all) => all.map((p) => (p.key === key ? { ...p, ...patch(p) } : p)));
+    setErrors((e) => ({ ...e, [`pkg-${key}`]: "", packages: "" }));
+  };
+
+  async function uploadPhotos(key: number, files: File[]) {
+    if (!target) return;
+    const pkg = packages.find((p) => p.key === key);
+    if (!pkg) return;
+    const room = MAX_PHOTOS - pkg.photos.length - pkg.uploading;
+    const good = files.filter((f) => {
+      if (!PHOTO_TYPES.includes(f.type)) { toast.error(`${f.name}: use a JPEG, PNG or WebP image`); return false; }
+      if (f.size > MAX_PHOTO_BYTES) { toast.error(`${f.name}: each photo must be 5 MB or smaller`); return false; }
+      return true;
+    });
+    if (good.length > room) toast.error(`Up to ${MAX_PHOTOS} photos per requirement`);
+    const batch = good.slice(0, Math.max(room, 0));
+    if (!batch.length) return;
+    patchPackage(key, (p) => ({ uploading: p.uploading + batch.length }));
+    await Promise.all(
+      batch.map(async (file) => {
+        try {
+          const form = new FormData();
+          form.append("file", file);
+          const res = await apiClient.post<QuotationPhoto>(`/leads/${target.leadId}/quotation-photos`, form, { timeout: 60000 });
+          patchPackage(key, (p) => ({ photos: [...p.photos, res.data], uploading: p.uploading - 1 }));
+        } catch (err) {
+          toast.error(`${file.name}: ${errorMessage(err)}`);
+          patchPackage(key, (p) => ({ uploading: p.uploading - 1 }));
+        }
+      }),
+    );
+  }
 
   async function save() {
     if (!target) return;
     const e: Record<string, string> = {};
-    const filled = rows.filter((r) => r.description.trim() || r.unitPrice);
-    if (!filled.length) e.items = "Add at least one item";
-    else if (filled.some((r) => !r.description.trim())) e.items = "Every item needs a description";
-    else if (filled.some((r) => !(Number(r.quantity) > 0))) e.items = "Quantity must be greater than 0";
-    else if (filled.some((r) => r.unitPrice === "" || Number(r.unitPrice) < 0)) e.items = "Every item needs a price";
-    else if (totals.total <= 0) e.items = "The total must be greater than 0";
-    if (pct > 100) e.discountPct = "Discount cannot be more than 100%";
+    packages.forEach((p, n) => {
+      const label = `Requirement ${n + 1}`;
+      const items = p.items.filter((i) => i.name.trim() || i.description.trim());
+      if (!p.name.trim()) e[`pkg-${p.key}`] = `${label} needs a name`;
+      else if (p.unitPrice === "" || Number(p.unitPrice) < 0) e[`pkg-${p.key}`] = `${label} needs a rate per unit`;
+      else if (!(Number(p.quantity) > 0)) e[`pkg-${p.key}`] = `${label}: quantity must be greater than 0`;
+      else if (items.some((i) => !i.name.trim())) e[`pkg-${p.key}`] = `${label}: every item needs a name`;
+    });
+    if (!Object.keys(e).length && totals.total <= 0) e.packages = "The total must be greater than 0";
     setErrors(e);
     if (Object.keys(e).length) return;
+    if (uploading) { toast.info("Wait for the photos to finish uploading"); return; }
 
     setBusy(true);
     try {
       const res = await apiClient.post<Quotation>(`/leads/${target.leadId}/quotations`, {
         templateId: templateId || null,
-        items: filled.map((r) => ({ description: r.description.trim(), quantity: Number(r.quantity), unitPrice: Number(r.unitPrice) })),
-        discountPct: pct,
-        validDays: Number(validDays) || 15,
+        packages: packages.map((p) => ({
+          name: p.name.trim(),
+          unitPrice: Number(p.unitPrice),
+          quantity: Number(p.quantity),
+          items: p.items.filter((i) => i.name.trim()).map((i) => ({ name: i.name.trim(), description: i.description.trim() || null })),
+          photos: p.photos.map((x) => x.path),
+        })),
         notes: notes.trim() || null,
       });
       const q = res.data;
-      if (q.status === "pending_approval") toast.info("Saved. The discount is above your limit, so your manager has to approve it before you can send.");
-      else toast.success(`Quotation v${q.version} ready`);
+      toast.success(`Quotation v${q.version} ready`);
       onClose();
       onDone();
       onCreated(q);
@@ -106,61 +194,203 @@ export function QuotationSheet({ target, onClose, onDone, onCreated }: Props) {
           <SelectField label="Template" value={templateId} options={templates.data.map((t) => ({ value: t.id, label: t.name }))} onChange={(e) => setTemplateId(e.target.value)} />
         )}
 
-        {/* items: a boxed table with serial numbers, like the printed quotation */}
-        <div className="space-y-2">
-          <span className="text-sm font-medium text-slate-700">Items<span className="ml-0.5 font-semibold text-red-600" aria-hidden="true">*</span></span>
-          <div className={cn("overflow-hidden rounded-xl border bg-white", errors.items ? "border-red-300" : "border-slate-200")}>
-            <div className={cn(ITEM_GRID, "border-b border-slate-200 bg-slate-50 py-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500")}>
-              <span className="text-center">Sr.</span>
-              <span>Description</span>
-              <span>Qty</span>
-              <span>Price (₹)</span>
-              <span className="hidden text-right sm:block">Amount</span>
-              <span className="sr-only">Remove</span>
+        <section className="space-y-3">
+          <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="min-w-0">
+              <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-800">
+                <Layers className="h-4 w-4 text-brand" aria-hidden="true" />
+                Client requirement packages ({packages.length})
+                <span className="font-semibold text-red-600" aria-hidden="true">*</span>
+              </h3>
+              <p className="mt-0.5 text-xs text-slate-500">Each requirement holds its own unit pricing, gifting items and approved visual mockups.</p>
             </div>
-            <ol className="divide-y divide-slate-100">
-              {rows.map((r, i) => (
-                <li key={i} className={cn(ITEM_GRID, "py-2")}>
-                  <span className="flex h-6 w-6 items-center justify-center justify-self-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">{i + 1}</span>
-                  <InputField hideLabel label={`Item ${i + 1} description`} value={r.description} onChange={(e) => setRow(i, { description: e.target.value })} className={CELL} />
-                  <InputField hideLabel label={`Item ${i + 1} quantity`} type="number" integer value={r.quantity} onChange={(e) => setRow(i, { quantity: e.target.value })} className={cn(CELL, "text-right")} />
-                  <InputField hideLabel label={`Item ${i + 1} unit price`} type="number" value={r.unitPrice} onChange={(e) => setRow(i, { unitPrice: e.target.value })} className={cn(CELL, "text-right")} />
-                  <span className="hidden truncate text-right text-sm font-semibold tabular-nums text-slate-800 sm:block">{inr((Number(r.quantity) || 0) * (Number(r.unitPrice) || 0))}</span>
-                  <button type="button" aria-label={`Remove item ${i + 1}`} title="Remove item" disabled={rows.length === 1} onClick={() => setRows((x) => x.filter((_, n) => n !== i))} className="pressable flex h-8 w-8 items-center justify-center justify-self-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"><Trash2 className="h-4 w-4" /></button>
-                </li>
-              ))}
-            </ol>
-            <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50/60 px-3 py-2">
-              <button type="button" onClick={() => setRows((r) => [...r, blank()])} className="pressable inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium text-brand hover:bg-brand-soft">
-                <Plus className="h-3.5 w-3.5" /> Add item
-              </button>
-              <span className="text-[13px] text-slate-500">
-                {rows.length} {rows.length === 1 ? "item" : "items"} · <span className="font-semibold tabular-nums text-slate-800">{inr(totals.subtotal)}</span>
-              </span>
-            </div>
+            <button type="button" className={OUTLINE_BTN} disabled={packages.length >= MAX_PACKAGES} onClick={() => setPackages((all) => [...all, blankPackage()])}>
+              <Plus className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Add requirement package</span><span className="sm:hidden">Add</span>
+            </button>
           </div>
-          {errors.items && <p role="alert" className="text-xs font-medium text-red-600">{errors.items}</p>}
-        </div>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <InputField label="Discount (%)" type="number" value={discount} onChange={(e) => { setDiscount(e.target.value); setErrors((x) => ({ ...x, discountPct: "" })); }} error={errors.discountPct} />
-            <p className={cn("mt-1 text-xs", over ? "font-medium text-amber-600" : "text-slate-400")}>
-              {over ? `Above your ${limit}% limit: your manager will approve it before you can send.` : `Your limit is ${limit}%.`}
-            </p>
-          </div>
-          <InputField label="Valid for (days)" type="number" integer value={validDays} onChange={(e) => setValidDays(e.target.value)} />
-        </div>
+          {packages.map((p, n) => (
+            <PackageCard
+              key={p.key}
+              index={n}
+              pkg={p}
+              error={errors[`pkg-${p.key}`]}
+              canRemove={packages.length > 1}
+              onPatch={(patch) => patchPackage(p.key, patch)}
+              onRemove={() => setPackages((all) => all.filter((x) => x.key !== p.key))}
+              onUpload={(files) => void uploadPhotos(p.key, files)}
+            />
+          ))}
+          {errors.packages && <p role="alert" className="text-xs font-medium text-red-600">{errors.packages}</p>}
+        </section>
+
         <TextareaField label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Add notes for the client" />
 
         <div className="space-y-1 rounded-2xl bg-slate-50 p-4 text-sm">
-          <div className="flex justify-between text-slate-500"><span>Subtotal</span><span>{inr(totals.subtotal)}</span></div>
-          {pct > 0 && <div className="flex justify-between text-slate-500"><span>Discount ({pct}%)</span><span>− {inr(totals.discount)}</span></div>}
-          <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900"><span>Total</span><span>{inr(totals.total)}</span></div>
+          {packages.map((p, n) => (
+            <div key={p.key} className="flex justify-between gap-3 text-slate-500">
+              <span className="truncate">{p.name.trim() || `Requirement ${n + 1}`}</span>
+              <span className="tabular-nums">{inr((Number(p.quantity) || 0) * (Number(p.unitPrice) || 0))}</span>
+            </div>
+          ))}
+          <div className="flex justify-between border-t border-slate-200 pt-2 text-base font-semibold text-slate-900"><span>Total</span><span className="tabular-nums">{inr(totals.total)}</span></div>
         </div>
 
-        <Button onClick={save} loading={busy} className="w-full">{over ? "Save and ask for approval" : "Save quotation"}</Button>
+        <Button onClick={save} loading={busy} disabled={uploading} className="w-full">
+          {uploading ? "Uploading photos…" : "Save quotation"}
+        </Button>
       </div>
     </Sheet>
+  );
+}
+
+type CardProps = {
+  index: number;
+  pkg: PackageDraft;
+  error?: string;
+  canRemove: boolean;
+  onPatch: (patch: (p: PackageDraft) => Partial<PackageDraft>) => void;
+  onRemove: () => void;
+  onUpload: (files: File[]) => void;
+};
+
+/** One client requirement: name, rate x quantity, the items inside it and its mockup photos. */
+export function PackageCard({ index, pkg, error, canRemove, onPatch, onRemove, onUpload }: CardProps) {
+  const no = index + 1;
+  const fileInput = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const subtotal = (Number(pkg.quantity) || 0) * (Number(pkg.unitPrice) || 0);
+  const full = pkg.photos.length + pkg.uploading >= MAX_PHOTOS;
+
+  const setItem = (i: number, patch: Partial<ItemDraft>) => onPatch((p) => ({ items: p.items.map((x, n) => (n === i ? { ...x, ...patch } : x)) }));
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (!full) onUpload(Array.from(e.dataTransfer.files));
+  };
+
+  return (
+    <div className={cn("space-y-4 rounded-2xl border bg-slate-50/70 p-3 sm:p-4", error ? "border-red-300" : "border-slate-200")}>
+      {/* name */}
+      <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
+        <span className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">Requirement {no}</span>
+        <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
+          <InputField hideLabel label={`Requirement ${no} name`} placeholder="Enter requirement name" value={pkg.name} onChange={(e) => onPatch(() => ({ name: e.target.value }))} className={CELL} />
+        </div>
+        <button type="button" onClick={onRemove} disabled={!canRemove} className="pressable ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400">
+          <Trash2 className="h-3.5 w-3.5" /> Remove package
+        </button>
+      </div>
+
+      {/* pricing */}
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-3">
+        <div>
+          <span className={SMALL_LABEL} aria-hidden="true">Rate / unit (₹)</span>
+          <InputField hideLabel label={`Requirement ${no} rate per unit`} type="number" placeholder="0" value={pkg.unitPrice} onChange={(e) => onPatch(() => ({ unitPrice: e.target.value }))} className={CELL} />
+        </div>
+        <div>
+          <span className={SMALL_LABEL} aria-hidden="true">Quantity (pcs)</span>
+          <InputField hideLabel label={`Requirement ${no} quantity`} type="number" integer placeholder="0" value={pkg.quantity} onChange={(e) => onPatch(() => ({ quantity: e.target.value }))} className={CELL} />
+        </div>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Package subtotal</span>
+          <span className="mt-0.5 block truncate text-lg font-bold tabular-nums text-emerald-700">{inr(subtotal)}</span>
+        </div>
+      </div>
+
+      {/* items */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
+            <Boxes className="h-4 w-4 text-slate-500" aria-hidden="true" /> Items in requirement {no} ({pkg.items.length})
+          </h4>
+          <button type="button" className={OUTLINE_BTN} disabled={pkg.items.length >= MAX_ITEMS} onClick={() => onPatch((p) => ({ items: [...p.items, blankItem()] }))}>
+            <Plus className="h-3.5 w-3.5" /> Add item
+          </button>
+        </div>
+        {pkg.items.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-200 bg-white px-3 py-3 text-center text-xs text-slate-400">No items yet. Add the gifting items in this requirement.</p>
+        ) : (
+          <ol className="space-y-2">
+            {pkg.items.map((it, i) => (
+              <li key={i} className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1.5 sm:px-2.5">
+                <span className="w-5 shrink-0 text-center text-xs font-medium text-slate-400">{i + 1}</span>
+                <div className="w-[38%] shrink-0">
+                  <InputField hideLabel label={`Requirement ${no} item ${i + 1} name`} placeholder="Item" value={it.name} onChange={(e) => setItem(i, { name: e.target.value })} className={CELL} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <InputField hideLabel label={`Requirement ${no} item ${i + 1} description`} placeholder="Description" value={it.description} onChange={(e) => setItem(i, { description: e.target.value })} className={CELL} />
+                </div>
+                <button type="button" aria-label={`Remove item ${i + 1}`} title="Remove item" onClick={() => onPatch((p) => ({ items: p.items.filter((_, n) => n !== i) }))} className="pressable flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+
+      {/* mockup photos */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-700">
+            <Box className="h-4 w-4 text-slate-500" aria-hidden="true" /> Mockup photos for requirement {no} ({pkg.photos.length})
+          </h4>
+          <button type="button" className={OUTLINE_BTN} disabled={full} onClick={() => fileInput.current?.click()}>
+            <Upload className="h-3.5 w-3.5" /> Upload photos
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept={PHOTO_TYPES.join(",")}
+            multiple
+            className="hidden"
+            onChange={(e) => { onUpload(Array.from(e.target.files ?? [])); e.target.value = ""; }}
+          />
+        </div>
+
+        {(pkg.photos.length > 0 || pkg.uploading > 0) && (
+          <ul className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {pkg.photos.map((ph, i) => (
+              <li key={ph.path} className="group relative aspect-square overflow-hidden rounded-lg border border-slate-200 bg-white">
+                {ph.url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={ph.url} alt={`Requirement ${no} mockup ${i + 1}`} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="flex h-full w-full items-center justify-center text-slate-300"><ImageIcon className="h-6 w-6" /></span>
+                )}
+                <button type="button" aria-label={`Remove mockup ${i + 1}`} onClick={() => onPatch((p) => ({ photos: p.photos.filter((x) => x.path !== ph.path) }))} className="pressable absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/60 text-white hover:bg-red-600">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </li>
+            ))}
+            {Array.from({ length: pkg.uploading }, (_, i) => (
+              <li key={`up-${i}`} className="flex aspect-square items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-400">
+                <Loader2 className="h-5 w-5 animate-spin" aria-label="Uploading" />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!full && (
+          <button
+            type="button"
+            onClick={() => fileInput.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+            className={cn(
+              "flex w-full items-center justify-center gap-2 rounded-xl border border-dashed px-4 py-4 text-xs transition-colors",
+              dragging ? "border-brand bg-brand-soft text-brand" : "border-slate-300 bg-white text-slate-500 hover:border-brand/50",
+            )}
+          >
+            <ImageIcon className="h-4 w-4" aria-hidden="true" />
+            Drag &amp; drop reference photos for requirement {no}, or click to upload
+          </button>
+        )}
+      </div>
+
+      {error && <p role="alert" className="text-xs font-medium text-red-600">{error}</p>}
+    </div>
   );
 }

@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     PROJECT_NAME: str = "TOFAA CRM"
     API_V1_STR: str = "/api/v1"
-    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"
+    BACKEND_CORS_ORIGINS: str = "http://localhost:3000"  # comma separated exact origins, e.g. https://crm.tofaa.in
+    # Optional pattern for origins that change, like Vercel previews: https://tofaa-crm(-[a-z0-9-]+)?\.vercel\.app
+    BACKEND_CORS_ORIGIN_REGEX: str = ""
     FRONTEND_URL: str = "http://localhost:3000"
 
     RESEND_API_KEY: str = ""
@@ -41,8 +43,14 @@ class Settings(BaseSettings):
     WHATSAPP_COST_PER_CONVERSATION: float = 0.8  # INR estimate for the admin usage view
 
     # Phase 2
-    COMPANY_NAME: str = "Tofaa"  # printed on quotations
+    COMPANY_NAME: str = "Tofaa India"  # printed on quotations
+    # Quotation letterhead footer. Write "\n" in COMPANY_ADDRESS for a line break; empty = the letterhead address.
     COMPANY_ADDRESS: str = ""
+    COMPANY_PHONE: str = "+91 9511870124"
+    COMPANY_EMAIL: str = "indiatofaa@gmail.com"
+    COMPANY_WEBSITE: str = "www.tofaaindia.com"
+    COMPANY_GSTIN: str = "27AIEPC1532D2ZY"
+    COMPANY_POWERED_BY: str = "SIDDHI GROUP OF COMPANIES"
     ERP_WEBHOOK_SECRET: str = ""  # the ERP signs payment callbacks with this; empty = reject them all
     PAYMENT_FALLBACK_ENABLED: bool = True  # Finance "Confirm payment" button; turn off once the ERP link is live
 

@@ -95,7 +95,7 @@ client = TestClient(app)
         ("get", "/api/v1/targets/card"), ("get", "/api/v1/targets"), ("put", "/api/v1/targets"), ("get", "/api/v1/approvals"),
         ("get", "/api/v1/payments"), ("post", "/api/v1/payments/x/confirm"), ("get", "/api/v1/quotation-templates"),
         ("get", "/api/v1/leads/x/deal"), ("post", "/api/v1/leads/x/quotations"), ("post", "/api/v1/leads/x/minutes"),
-        ("put", "/api/v1/leads/x/agreement/signed"), ("post", "/api/v1/leads/x/payment-request"), ("get", "/api/v1/quotations/x/pdf"),
+        ("put", "/api/v1/leads/x/agreement/details"), ("get", "/api/v1/leads/x/agreement/pdf"), ("post", "/api/v1/leads/x/payment-request"), ("get", "/api/v1/quotations/x/pdf"),
     ],
 )
 def test_phase2_routes_require_sign_in(method, path):

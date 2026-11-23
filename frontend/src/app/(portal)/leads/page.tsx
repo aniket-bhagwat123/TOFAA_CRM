@@ -3,6 +3,7 @@ import { Ban, Columns3, FileUp, KanbanSquare, Plus, Table2 } from "lucide-react"
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BoardCard } from "@/components/crm/board-card";
+import { CALL_STATUS_OPTIONS, TAG_OPTIONS } from "@/components/crm/call-status-badge";
 import { EditLeadSheet } from "@/components/crm/edit-lead-sheet";
 import { ImportModal } from "@/components/crm/import-modal";
 import { leadTarget } from "@/components/crm/lead-card";
@@ -36,6 +37,7 @@ const COLUMNS: Column[] = [
   { key: "meeting_scheduled", label: "Meeting Scheduled", stages: ["meeting_scheduled"], dropTo: "meeting_scheduled" },
   { key: "requirement_received", label: "Requirement", stages: ["requirement_received"], dropTo: "requirement_received" },
   { key: "quotation_sent", label: "Quotation Sent", stages: ["quotation_sent"], dropTo: "quotation_sent" },
+  { key: "sampling", label: "Sampling", stages: ["sampling"], dropTo: "sampling" },
   { key: "agreement_payment", label: "Agreement & Payment", stages: ["agreement_payment"], dropTo: "agreement_payment" },
   { key: "won", label: "Won", stages: ["closed_won"], dropTo: "closed_won" },
   { key: "lost", label: "Lost", stages: ["closed_lost"], dropTo: "closed_lost" },
@@ -60,6 +62,8 @@ export default function LeadsPage() {
   const [source, setSource] = useState("");
   const [owner, setOwner] = useState("");
   const [overdue, setOverdue] = useState(false);
+  const [callStatus, setCallStatus] = useState("");
+  const [tag, setTag] = useState("");
   const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
@@ -93,7 +97,7 @@ export default function LeadsPage() {
   const chooseTab = (t: "pipeline" | "lost") => setView(t === "lost" ? "lost" : layout);
   const reset = (fn: () => void) => { fn(); setPage(1); };
 
-  const common = { search: q, source, ownerId: owner, overdue: overdue || undefined, pipeline: "new_business" };
+  const common = { search: q, source, callOutcome: callStatus || undefined, tag: tag || undefined, ownerId: owner, overdue: overdue || undefined, pipeline: "new_business" };
   const board = useApi<Lead[]>(view !== "table" ? "/leads/board" : null, view === "lost" ? { ...common, overdue: undefined } : common);
   const list = useApi<Paged<Lead>>(view === "table" ? "/leads" : null, { ...common, stage, page, limit: 25 });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
@@ -104,7 +108,7 @@ export default function LeadsPage() {
   const boardLeads = board.data ?? [];
   const byColumn = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, boardLeads.filter((l) => c.stages.includes(l.stage))])), [boardLeads, columns]);
   const lostLeads = useMemo(() => boardLeads.filter((l) => l.stage === "closed_lost"), [boardLeads]);
-  const filtering = !!(q || source || owner || (view !== "lost" && overdue) || (view === "table" && stage));
+  const filtering = !!(q || source || callStatus || tag || owner || (view !== "lost" && overdue) || (view === "table" && stage));
   const active = view === "table" ? list : board;
   const isEmpty = view === "table" ? (list.data?.items.length ?? 0) === 0 : view === "lost" ? lostLeads.length === 0 : boardLeads.length === 0;
 
@@ -137,40 +141,16 @@ export default function LeadsPage() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader title="Leads" />
 
-      {/* tabs: the pipeline, or the lost leads */}
+      {/* tabs on the left; search and the board / table switch on the right */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Leads">
           {tab<"pipeline" | "lost">("pipeline", view === "lost" ? "lost" : "pipeline", chooseTab, "Pipeline", KanbanSquare)}
           {tab<"pipeline" | "lost">("lost", view === "lost" ? "lost" : "pipeline", chooseTab, "Lost", Ban)}
         </div>
-      </div>
-
-      {/* filters on the left, actions on the right */}
-      <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-        <SearchInput className="lg:w-60 lg:min-w-0 xl:w-72" value={search} onChange={(v) => reset(() => setSearch(v))} placeholder="Search" />
-        {view === "table" && (
-          <select className={select} value={stage} onChange={(e) => reset(() => setStage(e.target.value))} aria-label="Stage">
-            <option value="">All stages</option>
-            {columns.flatMap((c) => c.stages).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-          </select>
-        )}
-        <select className={select} value={source} onChange={(e) => reset(() => setSource(e.target.value))} aria-label="Source">
-          <option value="">All sources</option>
-          {(actions.meta?.sources ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        {user && (
-          <select className={select} value={owner} onChange={(e) => reset(() => setOwner(e.target.value))} aria-label="Owner">
-            <option value="">{manager ? "Whole team" : "My deals"}</option>
-            {manager && <option value={user.id}>My deals</option>}
-            {people.data?.filter((p) => p.id !== user.id).map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
-          </select>
-        )}
-        {view !== "lost" && <button type="button" onClick={() => reset(() => setOverdue((o) => !o))} aria-pressed={overdue} className={cn("pressable h-10 shrink-0 rounded-xl border px-4 text-sm font-medium", overdue ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300/80 bg-white text-slate-600")}>
-          Overdue
-        </button>}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <SearchInput className="min-w-0 flex-1 sm:w-64 sm:flex-none xl:w-72" value={search} onChange={(v) => reset(() => setSearch(v))} placeholder="Search" />
           {view !== "lost" && (
-            <div className="flex h-10 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
+            <div className="flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
               {([["board", "Board view", Columns3], ["table", "Table view", Table2]] as const).map(([v, label, Icon]) => (
                 <Tooltip key={v} label={label}>
                   <button
@@ -187,6 +167,40 @@ export default function LeadsPage() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* filters on the left, actions on the right */}
+      <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+        {view === "table" && (
+          <select className={select} value={stage} onChange={(e) => reset(() => setStage(e.target.value))} aria-label="Stage">
+            <option value="">All stages</option>
+            {columns.flatMap((c) => c.stages).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
+          </select>
+        )}
+        <select className={select} value={source} onChange={(e) => reset(() => setSource(e.target.value))} aria-label="Source">
+          <option value="">All sources</option>
+          {(actions.meta?.sources ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className={select} value={callStatus} onChange={(e) => reset(() => setCallStatus(e.target.value))} aria-label="Call status">
+          <option value="">All call statuses</option>
+          {CALL_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <select className={select} value={tag} onChange={(e) => reset(() => setTag(e.target.value))} aria-label="Tag">
+          <option value="">All tags</option>
+          {TAG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        {user && (
+          <select className={select} value={owner} onChange={(e) => reset(() => setOwner(e.target.value))} aria-label="Owner">
+            <option value="">{manager ? "Whole team" : "My deals"}</option>
+            {manager && <option value={user.id}>My deals</option>}
+            {people.data?.filter((p) => p.id !== user.id).map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
+          </select>
+        )}
+        {view !== "lost" && <button type="button" onClick={() => reset(() => setOverdue((o) => !o))} aria-pressed={overdue} className={cn("pressable h-10 shrink-0 rounded-xl border px-4 text-sm font-medium", overdue ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300/80 bg-white text-slate-600")}>
+          Overdue
+        </button>}
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <Button variant="secondary" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /> Import</Button>
           {addButton}
         </div>

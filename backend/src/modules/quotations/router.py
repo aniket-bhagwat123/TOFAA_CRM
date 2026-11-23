@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, Response
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, File, Response, UploadFile
+from starlette.concurrency import run_in_threadpool
 
 from src.core.access import require_lead_role
 from src.core.schema import ok
@@ -32,6 +35,13 @@ def create_quotation(lead_id: str, body: schemas.QuotationCreate, user: CurrentU
     q = service.create_quotation(user, lead_id, body)
     msg = "Sent for approval: the discount is above your limit." if q["needs_approval"] else "Quotation ready."
     return ok(q, msg)
+
+
+@router.post("/leads/{lead_id}/quotation-photos", status_code=201)
+async def upload_photo(lead_id: str, user: CurrentUserDep, file: Annotated[UploadFile, File()]):
+    """One mockup photo for a requirement package. The returned path goes into the package's `photos`."""
+    data = await file.read(service.MAX_PHOTO_BYTES + 1)
+    return ok(await run_in_threadpool(lambda: service.upload_photo(user, lead_id, data, file.filename)), "Photo uploaded.")
 
 
 @router.get("/leads/{lead_id}/quotations")

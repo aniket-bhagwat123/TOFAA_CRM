@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import type { Lead } from "@/types/crm";
 import { Avatar } from "../ui/avatar";
 import { StageBadge } from "../ui/stage-badge";
+import { CallStatusBadge, LeadTags } from "./call-status-badge";
 
 type Props = { lead: Lead; showOwner?: boolean; onDragStart: (id: string) => void; onOpen: () => void };
 
@@ -13,6 +14,8 @@ type Props = { lead: Lead; showOwner?: boolean; onDragStart: (id: string) => voi
 export function BoardCard({ lead, showOwner, onDragStart, onOpen }: Props) {
   const closed = lead.stage === "closed_won" || lead.stage === "closed_lost";
   const fu = followUpLabel(closed ? "9999-12-31" : lead.nextFollowUp);
+  // Call status matters while the lead is being reached; from Meeting Scheduled on, the meeting is what counts.
+  const showCall = lead.pipeline !== "client" && (lead.stage === "new_lead" || lead.stage === "connected");
   return (
     <div
       draggable
@@ -36,8 +39,10 @@ export function BoardCard({ lead, showOwner, onDragStart, onOpen }: Props) {
         </div>
       )}
 
-      {(lead.dealValue || lead.valueBand || lead.source) && (
+      {(showCall || lead.dealValue || lead.valueBand || lead.source) && (
         <div className="flex flex-wrap gap-1.5">
+          {showCall && <CallStatusBadge outcome={lead.lastCallOutcome} at={lead.lastCallAt} attempts={lead.callAttempts} />}
+          {showCall && <LeadTags tags={lead.tags} outcome={lead.lastCallOutcome} />}
           {(lead.dealValue || lead.valueBand) && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand" title={lead.valueSource ?? undefined}>{lead.dealValue ? inrShort(lead.dealValue) : BAND_LABEL[lead.valueBand!]}</span>}
           {lead.source && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{lead.source}</span>}
         </div>

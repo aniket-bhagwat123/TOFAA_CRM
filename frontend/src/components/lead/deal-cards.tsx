@@ -1,5 +1,5 @@
 "use client";
-import { CalendarCheck, Check, Download, FilePlus2, FileSignature, FileText, Handshake, NotebookPen, Pencil, Plus, Send, Wallet } from "lucide-react";
+import { CalendarCheck, Check, Download, FilePlus2, FileSignature, FileText, Handshake, Images, NotebookPen, Pencil, Plus, Send, Wallet } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -165,10 +165,54 @@ export function QuotesCard({ deal, closed, onCreate, onSend }: { deal: DealData 
                 </div>
               </div>
               <div className="mt-1 text-xs text-slate-400">
-                {q.number} · {formatDate(q.createdAt)} · {q.items.length} {q.items.length === 1 ? "item" : "items"}{q.discountPct ? ` · ${q.discountPct}% discount` : ""}
+                {q.number} · {formatDate(q.createdAt)} · {q.packages?.length ? `${q.packages.length} ${q.packages.length === 1 ? "requirement" : "requirements"}` : `${q.items.length} ${q.items.length === 1 ? "item" : "items"}`}{q.discountPct ? ` · ${q.discountPct}% discount` : ""}
               </div>
               {q.status === "pending_approval" && <p className="mt-1.5 text-xs text-amber-700">Discount {q.discountPct}% is above the {q.discountLimit ?? 0}% limit. Your manager has been asked to approve it.</p>}
               {q.status === "rejected" && <p className="mt-1.5 text-xs text-red-600">Rejected{q.decisionNote ? `: ${q.decisionNote}` : ""}. Make a new version with a lower discount.</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </CardShell>
+  );
+}
+
+// --- samples ---------------------------------------------------------------------------------------------------------
+
+/** Sample images and files per item, and when they last went to the client. */
+export function SamplesCard({ deal, closed, onOpen }: { deal: DealData | null; closed: boolean; onOpen: () => void }) {
+  const items = deal?.samples?.items ?? [];
+  const last = deal?.samples?.lastSent;
+  const files = items.reduce((n, i) => n + i.files.length, 0);
+  const subtitle = last
+    ? `Sent by ${last.channel} on ${formatDate(last.sentAt)} · ${last.itemCount} ${last.itemCount === 1 ? "item" : "items"}, ${last.fileCount} ${last.fileCount === 1 ? "file" : "files"}`
+    : items.length ? `${items.length} ${items.length === 1 ? "item" : "items"}, ${files} ${files === 1 ? "file" : "files"} · not sent yet` : "No samples yet";
+  return (
+    <CardShell
+      icon={Images}
+      title="Samples"
+      subtitle={subtitle}
+      action={<Button variant="secondary" className={pill} disabled={closed} onClick={onOpen}>{items.length ? <><Pencil className="h-3.5 w-3.5" /> Manage</> : <><Plus className="h-3.5 w-3.5" /> Add samples</>}</Button>}
+    >
+      {items.length > 0 && (
+        <ul className="mt-3.5 space-y-2">
+          {items.map((it, n) => (
+            <li key={it.id ?? n} className="flex items-center gap-3 rounded-xl border border-slate-200 p-2.5">
+              <div className="flex shrink-0 -space-x-2">
+                {it.files.slice(0, 3).map((f) =>
+                  (f.mime ?? "").startsWith("image/") && f.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={f.path} src={f.url} alt="" className="h-9 w-9 rounded-lg border-2 border-white object-cover" />
+                  ) : (
+                    <span key={f.path} className="flex h-9 w-9 items-center justify-center rounded-lg border-2 border-white bg-slate-100 text-slate-400"><FileText className="h-4 w-4" /></span>
+                  ),
+                )}
+                {it.files.length === 0 && <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-dashed border-slate-300 text-slate-300"><Images className="h-4 w-4" /></span>}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-slate-800">{it.itemName}</div>
+                <div className="truncate text-xs text-slate-400">{[it.packageName, `${it.files.length} ${it.files.length === 1 ? "file" : "files"}`].filter(Boolean).join(" · ")}</div>
+              </div>
             </li>
           ))}
         </ul>
@@ -191,7 +235,7 @@ function Step({ done, label, children }: { done: boolean; label: string; childre
   );
 }
 
-export function AgreementCard({ lead, deal, closed, onUpload, onPayment, onReload }: { lead: Lead; deal: DealData | null; closed: boolean; onUpload: () => void; onPayment: () => void; onReload: () => void }) {
+export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onReload }: { lead: Lead; deal: DealData | null; closed: boolean; onPrepare: () => void; onPayment: () => void; onReload: () => void }) {
   const [busy, setBusy] = useState(false);
   const ag = deal?.agreement;
   const pay = ag?.payment;
@@ -209,19 +253,29 @@ export function AgreementCard({ lead, deal, closed, onUpload, onPayment, onReloa
   }
 
   return (
-    <CardShell icon={FileSignature} title="Agreement & payment" subtitle={pay?.status === "confirmed" ? "Paid" : ag?.signedAt ? "Signed. Waiting for payment." : "Sent, signed, invoiced, paid"}>
+    <CardShell
+      icon={FileSignature}
+      title="Agreement & payment"
+      subtitle={pay?.status === "confirmed" ? "Paid" : ag?.details ? `Prepared · ${inr(ag.totalAmount ?? 0)}` : "Prepared, sent, invoiced, paid"}
+      action={
+        <div className="flex items-center gap-1.5">
+          {ag?.details && <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs" onClick={() => void openPdf(`/leads/${lead.id}/agreement/pdf`)}><Download className="h-3.5 w-3.5" /> PDF</Button>}
+          <Button variant="secondary" className={pill} disabled={closed} onClick={onPrepare}>{ag?.details ? <><Pencil className="h-3.5 w-3.5" /> Edit agreement</> : <><Plus className="h-3.5 w-3.5" /> Prepare agreement</>}</Button>
+        </div>
+      }
+    >
       <ol className="mt-3.5 grid gap-4 sm:grid-cols-2">
+        <Step done={!!ag?.details} label="Agreement prepared">
+          {ag?.details ? <span className="inline-flex items-center gap-2">{ag.preparedAt ? formatDate(ag.preparedAt) : "Ready"} · {inr(ag.totalAmount ?? 0)}</span>
+            : <button type="button" disabled={closed} onClick={onPrepare} className="font-medium text-brand hover:underline disabled:opacity-50">Prepare the agreement</button>}
+        </Step>
         <Step done={!!ag?.sentAt} label="Agreement sent">
           {ag?.sentAt ? formatDate(ag.sentAt) : <button type="button" disabled={closed || busy} onClick={markSent} className="font-medium text-brand hover:underline disabled:opacity-50">Mark as sent</button>}
         </Step>
-        <Step done={!!ag?.signedAt} label="Agreement signed">
-          {ag?.signedAt ? <span className="inline-flex items-center gap-2">{formatDate(ag.signedAt)}{ag.signedUrl && <a href={ag.signedUrl} target="_blank" rel="noopener" className="font-medium text-brand hover:underline">{ag.signedName ?? "View file"}</a>}</span>
-            : <button type="button" disabled={closed} onClick={onUpload} className="font-medium text-brand hover:underline disabled:opacity-50">Upload the signed agreement</button>}
-        </Step>
         <Step done={!!ag?.invoiceRaisedAt} label="Invoice raised">
-          {ag?.invoiceRaisedAt ? `${ag.invoiceNumber} · ${formatDate(ag.invoiceRaisedAt)}` : ag?.signedAt && !closed
+          {ag?.invoiceRaisedAt ? `${ag.invoiceNumber} · ${formatDate(ag.invoiceRaisedAt)}` : (ag?.details || lead.stage === "agreement_payment") && !closed
             ? <Button className="mt-1 min-h-8 px-3 py-1 text-xs" onClick={onPayment}><Wallet className="h-3.5 w-3.5" /> Request payment</Button>
-            : "After the agreement is signed"}
+            : "After the agreement is prepared"}
         </Step>
         <Step done={pay?.status === "confirmed"} label="Payment received">
           {pay?.status === "confirmed" ? `${inr(pay.amountPaid)}${pay.confirmedAt ? ` · ${formatDate(pay.confirmedAt)}` : ""}`

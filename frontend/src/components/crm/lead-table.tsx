@@ -12,6 +12,7 @@ import { dealHref } from "@/lib/links";
 import { cn } from "@/lib/utils";
 import type { Lead, StageKey } from "@/types/crm";
 import { StageIcon } from "../lead/stage-icon";
+import { CallStatusBadge, LeadTags } from "./call-status-badge";
 import { leadTarget } from "./lead-card";
 import type { LeadTarget } from "./types";
 
@@ -37,6 +38,7 @@ export const mapsHref = (l: Lead) =>
 /** Leads as rows: who, how to reach them in one tap, where they are in the deal, and where they are on the map. */
 export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
   const router = useRouter();
+  const showCalls = leads.some((l) => l.pipeline !== "client"); // client projects do not run on calls
   const stop = (fn: () => void) => (e: MouseEvent) => { e.stopPropagation(); fn(); };
 
   return (
@@ -47,6 +49,7 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
             <TableHead className="pl-4">Company</TableHead>
             <TableHead>Contact person</TableHead>
             <TableHead>Stage</TableHead>
+            {showCalls && <TableHead>Call status</TableHead>}
             <TableHead>Location</TableHead>
             <TableHead className="w-px pr-4">Actions</TableHead>
           </TableRow>
@@ -74,6 +77,7 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
                   </div>
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}><StageCell lead={l} target={t} closed={closed} actions={actions} /></TableCell>
+                {showCalls && <TableCell><div className="flex max-w-[14rem] flex-wrap gap-1"><CallStatusBadge outcome={l.lastCallOutcome} at={l.lastCallAt} attempts={l.callAttempts} className="text-xs" />{!["closed_won", "closed_lost"].includes(l.stage) && <LeadTags tags={l.tags} outcome={l.lastCallOutcome} />}</div></TableCell>}
                 <TableCell>
                   {maps ? (
                     <a href={maps} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Open in Google Maps" className="pressable inline-flex max-w-[11rem] items-center gap-1.5 rounded-full bg-sky-50 py-1.5 pl-2.5 pr-3 text-xs font-medium text-sky-700 hover:bg-sky-100">
@@ -85,7 +89,7 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
                 </TableCell>
                 <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
                   <div className="-ml-2 flex items-center gap-0.5">
-                    <Tooltip label={!l.contact.phone ? "No phone number" : closed ? "Lead is closed" : `Call ${l.contact.name.split(" ")[0]}`}>
+                    <Tooltip label={!l.contact.phone ? "No phone number" : closed ? "Lead is closed" : "Call"}>
                       <button type="button" aria-label={`Call ${l.contact.name}`} disabled={!l.contact.phone || closed} onClick={stop(() => actions.call(t))} className={iconButton}>
                         <Phone className="h-4 w-4" />
                       </button>

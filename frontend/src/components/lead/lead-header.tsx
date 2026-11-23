@@ -37,7 +37,6 @@ const TONE = {
 export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, onReminder, onEdit, onReassign, onNote }: Props) {
   const closed = lead.stage === "closed_won" || lead.stage === "closed_lost";
   const fu = followUpLabel(lead.nextFollowUp);
-  const first = lead.contact.name.split(" ")[0];
 
   const followUpTone = closed ? "text-slate-400" : fu.tone === "text-slate-500" ? "text-slate-900" : fu.tone;
 
@@ -59,9 +58,25 @@ export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, o
           <p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-[13px] text-slate-500">
             <span className="truncate font-medium text-slate-700">{lead.contact.name}</span>
             {lead.contact.designation && <span className="truncate">{lead.contact.designation}</span>}
-            {lead.contact.phone && <><span className="text-slate-300">·</span><a href={`tel:${lead.contact.phone}`} className="inline-flex shrink-0 items-center gap-1 hover:text-brand"><Phone className="h-3 w-3" />{lead.contact.phone}</a></>}
+            {lead.contact.phone && (
+              <>
+                <span className="text-slate-300">·</span>
+                <a href={`tel:${lead.contact.phone}`} className="inline-flex shrink-0 items-center gap-1 hover:text-brand"><Phone className="h-3 w-3" />{lead.contact.phone}</a>
+                {/* with two numbers on file, the main one is the newer: it replaced a wrong number */}
+                {lead.contact.altPhone && <span className="-ml-1 rounded bg-emerald-50 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-emerald-700" title="Latest number">New</span>}
+              </>
+            )}
             {lead.contact.email && <><span className="text-slate-300">·</span><a href={`mailto:${lead.contact.email}`} className="inline-flex min-w-0 items-center gap-1 hover:text-brand"><Mail className="h-3 w-3 shrink-0" /><span className="truncate">{lead.contact.email}</span></a></>}
           </p>
+          {/* the earlier contact, under the new one */}
+          {lead.contact.altPhone && (
+            <p className="mt-0.5 flex min-w-0 items-center gap-2 text-[13px] text-slate-400">
+              {lead.contact.altName && <span className="truncate">{lead.contact.altName}</span>}
+              {lead.contact.altName && <span className="text-slate-300">·</span>}
+              <a href={`tel:${lead.contact.altPhone}`} title="Earlier number" className="inline-flex shrink-0 items-center gap-1 hover:text-brand"><Phone className="h-3 w-3" />{lead.contact.altPhone}</a>
+              <span className="rounded bg-slate-100 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-500">Old</span>
+            </p>
+          )}
         </div>
 
         {/* titled buttons; on phones the label hides and the icon stays */}
@@ -87,7 +102,7 @@ export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, o
         </dl>
 
         <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-          <Button onClick={onCall} disabled={!lead.contact.phone || closed} className="min-h-9 rounded-lg px-3.5 py-1.5"><Phone className="h-4 w-4" />Call {first}</Button>
+          <Button onClick={onCall} disabled={!lead.contact.phone || closed} className="min-h-9 rounded-lg px-3.5 py-1.5"><Phone className="h-4 w-4" />Call</Button>
           <Button variant="tinted" onClick={onWhatsApp} disabled={!lead.contact.phone} className="min-h-9 rounded-lg px-3.5 py-1.5"><MessageCircle className="h-4 w-4" />WhatsApp</Button>
           <Button variant="tinted" onClick={onMeeting} disabled={closed} className="min-h-9 rounded-lg px-3.5 py-1.5"><CalendarPlus className="h-4 w-4" />Meeting</Button>
           <Button variant="tinted" onClick={onReminder} disabled={closed} className="min-h-9 rounded-lg px-3.5 py-1.5"><Bell className="h-4 w-4" />Reminder</Button>

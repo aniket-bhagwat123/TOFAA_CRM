@@ -1,23 +1,33 @@
 from datetime import date
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field
+from pydantic import Field, StringConstraints
 
 from src.core.schema import CamelModel
 
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+Detail = Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)]
 
-class ItemIn(CamelModel):
-    description: str = Field(min_length=1, max_length=300)
-    quantity: Decimal = Field(gt=0, le=10_000_000)
+
+class PackageItemIn(CamelModel):
+    """One gifting item inside a requirement package. Not priced on its own: the package carries the price."""
+    name: Name
+    description: Detail | None = None
+
+
+class PackageIn(CamelModel):
+    """A client requirement: its own name, rate per unit, quantity, items and mockup photos."""
+    name: Name
     unit_price: Decimal = Field(ge=0, le=Decimal("10000000000"))
+    quantity: Decimal = Field(gt=0, le=10_000_000)
+    items: list[PackageItemIn] = Field(default_factory=list, max_length=50)
+    photos: list[str] = Field(default_factory=list, max_length=10)  # storage paths from POST /leads/{id}/quotation-photos
 
 
 class QuotationCreate(CamelModel):
     template_id: str | None = None
-    items: list[ItemIn] = Field(min_length=1, max_length=50)
-    discount_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
-    valid_days: int = Field(default=15, ge=1, le=365)
+    packages: list[PackageIn] = Field(min_length=1, max_length=20)
     notes: str | None = Field(default=None, max_length=2000)
 
 

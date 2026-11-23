@@ -62,7 +62,7 @@ export function SendQuotationSheet({ target, quotation, onClose, onDone }: Props
         <div className="space-y-5">
           <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
             <div>
-              <div className="text-xs text-slate-400">Version {quotation.version} · valid {quotation.validDays} days</div>
+              <div className="text-xs text-slate-400">Version {quotation.version}</div>
               <div className="text-lg font-semibold text-slate-900">{inr(quotation.total)}</div>
             </div>
             <Button type="button" variant="secondary" className="min-h-9 px-3 py-1.5" onClick={() => void openPdf(`/quotations/${quotation.id}/pdf`)}><Download className="h-4 w-4" /> Preview PDF</Button>

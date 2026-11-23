@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Megaphone, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, Wallet } from "lucide-react";
+import { ArrowRightLeft, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Images, Megaphone, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatDateTime, OUTCOME_LABEL, STAGE_LABEL } from "@/lib/format";
 import type { Activity, StageKey } from "@/types/crm";
@@ -19,6 +19,7 @@ const ICON: Record<Activity["kind"], ReactNode> = {
   payment: <Wallet className="h-4 w-4" />,
   client: <Building2 className="h-4 w-4" />,
   campaign: <Megaphone className="h-4 w-4" />,
+  sample: <Images className="h-4 w-4" />,
 };
 
 export function activityTitle(a: Activity): string {
@@ -38,6 +39,7 @@ export function activityTitle(a: Activity): string {
     case "payment": return a.outcome === "confirmed" ? "Payment received" : a.outcome === "partial" ? "Partial payment" : "Payment requested";
     case "client": return a.outcome === "converted" ? "Became a client" : a.outcome === "project" ? "New project" : a.outcome === "occasion" ? "Occasion added" : a.outcome === "contact" ? "Contact added" : "Client";
     case "campaign": return "Campaign";
+    case "sample": return "Samples sent";
     default: return "Imported";
   }
 }

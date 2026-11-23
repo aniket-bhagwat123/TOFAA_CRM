@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { EditLeadSheet } from "@/components/crm/edit-lead-sheet";
 import { leadTarget } from "@/components/crm/lead-card";
 import { useLeadActions } from "@/components/crm/use-lead-actions";
-import { AgreementCard, DealDetailsCard, MeetingNotesCard, MeetingsCard, QuotesCard } from "@/components/lead/deal-cards";
+import { AgreementCard, DealDetailsCard, MeetingNotesCard, MeetingsCard, QuotesCard, SamplesCard } from "@/components/lead/deal-cards";
 import { LeadHeader } from "@/components/lead/lead-header";
 import { NoteSheet } from "@/components/lead/note-sheet";
 import { StageProgress } from "@/components/lead/stage-progress";
@@ -105,8 +105,11 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
         <DealDetailsCard lead={lead} deal={deal.data} onSaved={reloadAll} />
         <MeetingNotesCard deal={deal.data} closed={closed} onAdd={() => actions.minutes(target)} />
         <QuotesCard deal={deal.data} closed={closed} onCreate={() => actions.quotation(target)} onSend={(q) => actions.send(target, q)} />
+        {pipeline !== "client" && (reached || !!deal.data?.samples?.items.length) && (
+          <SamplesCard deal={deal.data} closed={closed} onOpen={() => actions.sampling(target)} />
+        )}
         {showAgreement && (
-          <AgreementCard lead={lead} deal={deal.data} closed={closed} onUpload={() => actions.agreement(target)} onPayment={() => actions.payment(target, deal.data?.value.quoted)} onReload={reloadAll} />
+          <AgreementCard lead={lead} deal={deal.data} closed={closed} onPrepare={() => actions.agreement(target)} onPayment={() => actions.payment(target, deal.data?.agreement.totalAmount ?? deal.data?.value.quoted)} onReload={reloadAll} />
         )}
         {lead.notes && (
           <section className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm sm:p-5">

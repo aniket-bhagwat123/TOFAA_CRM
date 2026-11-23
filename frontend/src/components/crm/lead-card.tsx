@@ -14,9 +14,14 @@ export const leadTarget = (l: Lead): LeadTarget => ({
   leadId: l.id,
   name: l.projectTitle ? `${l.company.name} · ${l.projectTitle}` : `${l.company.name} · ${l.contact.name}`,
   phone: l.contact.phone,
+  altPhone: l.contact.altPhone,
+  contactName: l.contact.name,
+  altName: l.contact.altName,
   stage: l.stage,
   pipeline: l.pipeline,
   companyId: l.companyId,
+  lastCallOutcome: l.lastCallOutcome,
+  callAttempts: l.callAttempts,
 });
 
 const isClosed = (l: Lead) => l.stage === "closed_won" || l.stage === "closed_lost";
