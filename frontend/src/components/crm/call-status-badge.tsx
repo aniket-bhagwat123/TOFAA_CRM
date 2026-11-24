@@ -45,16 +45,14 @@ export function CallStatusBadge({ outcome, at, attempts, className }: Props) {
   );
 }
 
-/** Nurture tag: shown only while the lead's latest call is "Future requirement" (the call that sets it). */
-export function LeadTags({ tags, outcome, className }: { tags?: string[] | null; outcome?: string | null; className?: string }) {
-  if (!tags?.length || outcome !== "future_requirement") return null;
+/** Nurture (while the latest call is "Future requirement") and Cold (still not reachable after the retry limit). */
+export function LeadTags({ tags, outcome, cold, className }: { tags?: string[] | null; outcome?: string | null; cold?: boolean; className?: string }) {
+  const shown = [...(outcome === "future_requirement" && tags?.includes("nurture") ? ["nurture"] : []), ...(cold ? ["cold"] : [])];
+  if (!shown.length) return null;
   return (
     <>
-      {tags.filter((t) => TAG_LABEL[t]).map((t) => (
-        <span
-          key={t}
-          className={cn("inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700", className)}
-        >
+      {shown.map((t) => (
+        <span key={t} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", t === "cold" ? "bg-sky-50 text-sky-700" : "bg-indigo-50 text-indigo-700", className)}>
           {TAG_LABEL[t]}
         </span>
       ))}

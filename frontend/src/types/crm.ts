@@ -29,6 +29,7 @@ export type Lead = {
   lastCallOutcome?: string | null; // "What happened?" on the latest logged call
   callAttempts?: number; // calls logged as "Not reachable"
   tags?: string[]; // "nurture" (set by a "Future requirement" call)
+  cold?: boolean; // still "Not reachable" after the retry limit
   lastCallAt?: string | null;
   createdAt: string;
   company: { id: string; name: string; kind: "direct" | "os"; city?: string | null };
@@ -81,7 +82,7 @@ export type TodayView = {
 
 export type Activity = {
   id: string;
-  kind: "created" | "call" | "whatsapp" | "meeting" | "note" | "stage_change" | "reassign" | "task" | "import" | "mom" | "quotation" | "agreement" | "payment" | "client" | "campaign" | "sample";
+  kind: "created" | "call" | "whatsapp" | "meeting" | "note" | "stage_change" | "reassign" | "task" | "import" | "mom" | "quotation" | "agreement" | "payment" | "client" | "campaign" | "sample" | "order";
   outcome?: string | null;
   note?: string | null;
   meta: Record<string, unknown>;
@@ -102,6 +103,7 @@ export type LeadMeta = {
   lostReasons: string[];
   valueBands: string[];
   requiredInputs: Record<string, string[]>;
+  rules?: { retry: { maxAttempts: number; gapDays: number }; nurtureDays: number; stuckDays: number };
 };
 
 export type DuplicateMatch = {
@@ -150,7 +152,7 @@ export type Quotation = {
   packages?: QuotationPackage[];
 };
 export type Minutes = { id: string; body?: string | null; fileName?: string | null; fileUrl?: string | null; createdAt: string; author?: { fullName?: string | null } | null };
-export type PaymentRequest = { id: string; invoiceNumber: string; amount: number; amountPaid: number; status: "requested" | "partial" | "confirmed"; requestedAt: string; confirmedAt?: string | null };
+export type PaymentRequest = { id: string; invoiceNumber: string; amount: number; amountPaid: number; status: "requested" | "partial" | "confirmed"; requestedAt: string; confirmedAt?: string | null; source?: "erp" | "finance" | null };
 export type AgreementTerm = { title: string; body: string };
 export type AgreementTotals = { units: number; base: number; avgRate: number; transportation: number; gstRate: number; gst: number; total: number };
 /** The agreement as prepared in the CRM (before it is signed). */
@@ -161,6 +163,7 @@ export type AgreementDetails = {
 };
 export type AgreementState = {
   details?: AgreementDetails | null; totalAmount?: number | null; preparedAt?: string | null;
+  termsStatus?: "standard" | "pending" | "approved" | "rejected"; termsNote?: string | null;
   options?: { scope: { value: string; label: string }[]; gstRates: number[]; defaultTerms: AgreementTerm[] };
   sentAt?: string | null; signedAt?: string | null; signedName?: string | null; signedUrl?: string | null;
   invoiceNumber?: string | null; invoiceRaisedAt?: string | null; paymentReceivedAt?: string | null;

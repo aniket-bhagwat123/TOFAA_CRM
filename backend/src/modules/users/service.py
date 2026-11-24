@@ -103,10 +103,9 @@ def assignable_users(actor: Profile) -> list[dict]:
 def _assignable_users(actor: Profile) -> list[dict]:
     """People a lead can be reassigned to."""
     q = get_service_client().table("profiles").select("id,full_name,role,manager_id").eq("is_active", True)
-    q = q.in_("role", [Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value])
-    if actor.role == Role.SALES_MANAGER:
-        q = q.or_(f"id.eq.{actor.id},manager_id.eq.{actor.id}")
-    elif actor.role != Role.ADMIN:
+    # KAMs can be given client accounts (and their projects), so they are offered too.
+    q = q.in_("role", [Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value, Role.KAM.value])
+    if actor.role not in (Role.ADMIN, Role.SALES_MANAGER):  # managers can hand a lead to anyone, like admins
         raise ForbiddenError()
     rows = q.order("full_name").execute().data
     urls = signed_urls(AVATARS, [r.get("avatar_path") for r in rows])

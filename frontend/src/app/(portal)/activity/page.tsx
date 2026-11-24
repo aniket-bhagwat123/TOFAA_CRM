@@ -12,7 +12,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { formatTime } from "@/lib/format";
-import { isManager } from "@/lib/roles";
+import { isManager, seesActivity } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
@@ -29,8 +29,12 @@ const KINDS: [string, string][] = [
   ["meeting", "Meetings"],
   ["note", "Notes"],
   ["stage_change", "Stage moves"],
+  ["reassign", "Reassignments"],
   ["quotation", "Quotations"],
+  ["sample", "Samples"],
+  ["agreement", "Agreements"],
   ["payment", "Payments"],
+  ["order", "Orders"],
 ];
 const IST = "Asia/Kolkata";
 const dayKey = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date(iso));
@@ -52,6 +56,8 @@ function ActivityFeed() {
   const companyId = params.get("client") ?? undefined;
   const user = useAppSelector((s) => s.auth.session?.profile);
   const manager = !!user && isManager(user.role);
+  // Role rules: executives never see Activity; each lead page still shows that lead's own timeline.
+  useEffect(() => { if (user && !seesActivity(user.role)) router.replace("/"); }, [user, router]);
 
   const [kind, setKind] = useState("");
   const [owner, setOwner] = useState("");

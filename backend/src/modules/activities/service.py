@@ -1,5 +1,6 @@
 import logging
 
+from src.core import app_settings
 from src.core.dates import now_ist
 from src.core.errors import AppError
 from src.core.keys import normalize_phone10, phone_key
@@ -10,7 +11,7 @@ from src.modules.activities.schemas import CallLog, CallOutcome
 from src.modules.auth.schemas import Profile
 from src.modules.leads import service as leads
 from src.modules.leads.schemas import StageMove
-from src.modules.leads.stages import CLOSED, LOST_REASONS
+from src.modules.leads.stages import CLOSED
 from src.modules.meetings import service as meetings
 from src.modules.tasks import service as tasks
 
@@ -41,7 +42,7 @@ def check(body: CallLog, open_lead: bool) -> list[dict]:
     if body.outcome == O.NOT_INTERESTED:
         if not body.lost_reason:
             errors.append({"field": "lostReason", "message": "Pick a reason."})
-        elif body.lost_reason not in LOST_REASONS:
+        elif body.lost_reason not in app_settings.lost_reasons():
             errors.append({"field": "lostReason", "message": "Pick a reason from the list."})
     if body.outcome == O.WRONG_CONTACT and (body.new_name or "").strip() and not (body.new_phone or "").strip():
         errors.append({"field": "newPhone", "message": "Enter the new number for this person"})

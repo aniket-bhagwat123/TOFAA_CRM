@@ -2,7 +2,7 @@ import logging
 import re
 from uuid import uuid4
 
-from src.core import cache
+from src.core import app_settings, cache
 from src.core.access import assert_can_access_lead, require_lead_role, visible_owner_ids
 from src.core.audit import write_audit
 from src.core.concurrency import check_version
@@ -20,12 +20,10 @@ from src.modules.leads import schemas
 from src.modules.leads.stages import lost_from, stage_label
 from src.modules.leads.stages import (
     CLOSED,
-    LOST_REASONS,
     NUMERIC_INPUTS,
     POSITION,
     PREREQUISITES,
     REQUIRED_INPUTS,
-    SOURCES,
     STAGES,
     STAGES_FOR,
     stage_for_pipeline,
@@ -97,8 +95,9 @@ def meta() -> dict:
         stages = get_service_client().table("stage_config").select("*").order("position").execute().data
         return {
             "stages": stages,
-            "sources": SOURCES,
-            "lostReasons": LOST_REASONS,
+            "sources": app_settings.sources(),
+            "lostReasons": app_settings.lost_reasons(),
+            "rules": {k: app_settings.get(k) for k in ("retry", "nurtureDays", "stuckDays")},
             "valueBands": VALUE_BANDS,
             "requiredInputs": REQUIRED_INPUTS,
         }
@@ -234,7 +233,7 @@ def create_lead(user: Profile, body: schemas.LeadCreate) -> dict:
 
 
 CALL_OUTCOMES = {"not_reachable", "call_back_later", "future_requirement", "interested", "not_interested", "wrong_contact"}
-TAGS = {"nurture"}
+TAGS = {"nurture", "cold"}  # cold is worked out: "Not reachable" at least the retry limit times
 
 
 def _call_outcome_filter(q, value: str):
@@ -279,7 +278,9 @@ def _lead_filters(q, user: Profile, *, stage, overdue, source, owner_id, search,
         q = q.eq("origin", origin)
     if call_outcome:
         q = _call_outcome_filter(q, call_outcome)
-    if tag:
+    if tag == "cold":
+        q = q.eq("last_call_outcome", "not_reachable").gte("call_attempts", int((app_settings.get("retry") or {}).get("maxAttempts") or 5))
+    elif tag:
         q = q.contains("tags", [tag if tag in TAGS else "-"])
     if overdue:
         q = q.lt("next_follow_up", today_ist().isoformat()).not_.in_("stage", list(CLOSED))
@@ -537,6 +538,7 @@ def reassign(user: Profile, lead_id: str, body: schemas.Reassign) -> dict:
 def attach_photos(rows: list[dict]) -> list[dict]:
     """Replace each contact's storage path with a short-lived signed URL (one batched request, cached)."""
     urls = signed_urls(CLIENT_IMAGES, [(r.get("contact") or {}).get("photo_path") for r in rows])
+    max_attempts = int((app_settings.get("retry") or {}).get("maxAttempts") or 5)
     for r in rows:
         contact = r.get("contact")
         if contact is not None:
@@ -545,6 +547,8 @@ def attach_photos(rows: list[dict]) -> list[dict]:
             r["contact"] = {k: contact.get(k) for k in ("id", "name", "designation", "phone", "alt_phone", "alt_name", "email")} | {"photo_url": url}
         r["deal_value"] = deal_value(r)
         r["value_source"] = value_source(r)
+        # Cold: still "Not reachable" after the retry limit (Settings > Rules).
+        r["cold"] = r.get("last_call_outcome") == "not_reachable" and int(r.get("call_attempts") or 0) >= max_attempts
     _attach_alt_names(rows)
     return _attach_last_call(rows)
 

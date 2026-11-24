@@ -1,8 +1,9 @@
 "use client";
-import { KeyRound, Pencil, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { KeyRound, Pencil, Target, UserCheck, UserPlus, UserX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TargetsModal } from "@/components/crm/targets-modal";
 import { UserSheet, type UserRow } from "@/components/crm/user-sheet";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export default function UsersPage() {
   const [role, setRole] = useState("");
   const [status, setStatus] = useState<"" | "active" | "inactive">("");
   const [sheet, setSheet] = useState<{ user: UserRow | null; password?: boolean } | null>(null);
+  const [targetsOpen, setTargetsOpen] = useState(false);
 
   useEffect(() => { if (me && me.role !== "admin") router.replace("/"); }, [me, router]);
 
@@ -69,7 +71,11 @@ export default function UsersPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <PageHeader title="Users" />
+      <PageHeader
+        title="Users"
+        description="People, roles, and each executive's monthly target and discount limit."
+        actions={<Button variant="secondary" onClick={() => setTargetsOpen(true)}><Target className="h-4 w-4" /> Monthly targets</Button>}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput className="sm:w-60" value={search} onChange={setSearch} placeholder="Search name, email or mobile" />
@@ -180,6 +186,7 @@ export default function UsersPage() {
         onClose={() => setSheet(null)}
         onDone={() => void users.reload()}
       />
+      <TargetsModal open={targetsOpen} onClose={() => setTargetsOpen(false)} onSaved={() => undefined} />
     </div>
   );
 }

@@ -78,7 +78,7 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
   const sheets: ReactNode = (
     <>
       <NumberPickerSheet target={pickNumber} onClose={() => setPickNumber(null)} onPick={(t, phone) => { setPickNumber(null); dial(t, phone); }} />
-      <QuickLogSheet target={call} lostReasons={meta.data?.lostReasons ?? []} onClose={() => setCall(null)} onDone={onChange} onMarkLost={(t) => setStage({ target: t, stage: "closed_lost" })} />
+      <QuickLogSheet target={call} lostReasons={meta.data?.lostReasons ?? []} rules={meta.data?.rules} onClose={() => setCall(null)} onDone={onChange} onMarkLost={(t) => setStage({ target: t, stage: "closed_lost" })} />
       <WhatsAppSheet target={wa} onClose={() => setWa(null)} onDone={onChange} />
       <MeetingSheet target={meeting} onClose={() => setMeeting(null)} onDone={onChange} />
       <MinutesSheet target={minutes} onClose={() => setMinutes(null)} onDone={onChange} />

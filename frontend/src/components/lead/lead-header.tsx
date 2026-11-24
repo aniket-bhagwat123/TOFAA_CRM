@@ -5,6 +5,8 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { followUpLabel, STAGE_LABEL, STAGE_TONE } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { seesActivity } from "@/lib/roles";
+import { useAppSelector } from "@/store/hooks";
 import type { Lead } from "@/types/crm";
 import { StageIcon } from "./stage-icon";
 
@@ -37,6 +39,7 @@ const TONE = {
 export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, onReminder, onEdit, onReassign, onNote }: Props) {
   const closed = lead.stage === "closed_won" || lead.stage === "closed_lost";
   const fu = followUpLabel(lead.nextFollowUp);
+  const role = useAppSelector((st) => st.auth.session?.profile.role); // executives never see Activity
 
   const followUpTone = closed ? "text-slate-400" : fu.tone === "text-slate-500" ? "text-slate-900" : fu.tone;
 
@@ -82,7 +85,7 @@ export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, o
         {/* titled buttons; on phones the label hides and the icon stays */}
         <div className="flex shrink-0 items-center gap-1.5">
           <button type="button" onClick={onNote} aria-label="Add a note" title="Add a note" className={cn(ICON, TONE.note)}><StickyNote className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Add note</span></button>
-          <Link href={`/activity?lead=${lead.id}`} aria-label="View activity" title="View activity" className={cn(ICON, TONE.activity)}><History className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Activity</span></Link>
+          {seesActivity(role) && <Link href={`/activity?lead=${lead.id}`} aria-label="View activity" title="View activity" className={cn(ICON, TONE.activity)}><History className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Activity</span></Link>}
           <button type="button" onClick={onEdit} aria-label="Edit details" title="Edit details" className={cn(ICON, TONE.edit)}><Pencil className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Edit</span></button>
           {canReassign && (
             <button type="button" onClick={onReassign} aria-label="Reassign" title="Reassign" className={cn(ICON, TONE.reassign)}><UserCog className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Reassign</span></button>

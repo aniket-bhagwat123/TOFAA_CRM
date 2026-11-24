@@ -1,4 +1,4 @@
-import { ArrowRightLeft, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Images, Megaphone, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, Wallet } from "lucide-react";
+import { ArrowRightLeft, Building2, CalendarDays, CheckCircle2, FileSignature, FileText, FileUp, Images, Megaphone, PackageCheck, MessageCircle, NotebookPen, Phone, Plus, StickyNote, UserCog, Wallet } from "lucide-react";
 import type { ReactNode } from "react";
 import { formatDateTime, OUTCOME_LABEL, STAGE_LABEL } from "@/lib/format";
 import type { Activity, StageKey } from "@/types/crm";
@@ -20,6 +20,7 @@ const ICON: Record<Activity["kind"], ReactNode> = {
   client: <Building2 className="h-4 w-4" />,
   campaign: <Megaphone className="h-4 w-4" />,
   sample: <Images className="h-4 w-4" />,
+  order: <PackageCheck className="h-4 w-4" />,
 };
 
 export function activityTitle(a: Activity): string {
@@ -35,11 +36,13 @@ export function activityTitle(a: Activity): string {
     case "created": return "Created";
     case "mom": return "Minutes of meeting";
     case "quotation": return `Quotation ${a.outcome === "sent" ? "sent" : a.outcome === "pending_approval" ? "waiting for approval" : a.outcome ?? ""}`.trim();
-    case "agreement": return a.outcome === "signed" ? "Agreement signed" : "Agreement sent";
+    case "agreement": return a.outcome === "signed" ? "Agreement signed" : a.outcome === "prepared" ? "Agreement prepared"
+      : a.outcome === "terms_approved" ? "Agreement terms approved" : a.outcome === "terms_rejected" ? "Agreement terms rejected" : "Agreement sent";
     case "payment": return a.outcome === "confirmed" ? "Payment received" : a.outcome === "partial" ? "Partial payment" : "Payment requested";
     case "client": return a.outcome === "converted" ? "Became a client" : a.outcome === "project" ? "New project" : a.outcome === "occasion" ? "Occasion added" : a.outcome === "contact" ? "Contact added" : "Client";
     case "campaign": return "Campaign";
     case "sample": return "Samples sent";
+    case "order": return `Order: ${({ production: "Production", quality_check: "Quality check", dispatched: "Dispatched", delivered: "Delivered" } as Record<string, string>)[a.outcome ?? ""] ?? "updated"}`;
     default: return "Imported";
   }
 }

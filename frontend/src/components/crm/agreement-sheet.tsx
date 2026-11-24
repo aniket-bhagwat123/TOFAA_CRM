@@ -12,7 +12,7 @@ import { fieldErrors } from "@/lib/api-errors";
 import { inr } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
-import type { AgreementTerm, DealData, QuotationPhoto } from "@/types/crm";
+import type { AgreementState, AgreementTerm, DealData, QuotationPhoto } from "@/types/crm";
 import {
   blankPackage, fromPackages, fromQuotation, MAX_PACKAGE_PHOTOS, MAX_PHOTO_BYTES, OUTLINE_BTN, PackageCard, packageErrors, packagesPayload,
   PHOTO_TYPES, type PackageDraft,
@@ -122,8 +122,8 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     }));
   }
 
-  /** Checks and saves the prepared agreement. Returns false when something needs fixing. */
-  async function saveDetails(): Promise<boolean> {
+  /** Checks and saves the prepared agreement. Returns the saved state, or false when something needs fixing. */
+  async function saveDetails(): Promise<AgreementState | false> {
     if (!target) return false;
     const e = packageErrors(packages);
     if (!Object.keys(e).length && t.total <= 0) e.packages = "The total must be greater than 0";
@@ -133,12 +133,12 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     if (Object.keys(e).length) { toast.error("Some details need fixing"); return false; }
     if (uploading) { toast.info("Wait for the photos to finish uploading"); return false; }
     try {
-      await apiClient.put(`/leads/${target.leadId}/agreement/details`, {
+      const res = await apiClient.put<AgreementState>(`/leads/${target.leadId}/agreement/details`, {
         packages: packagesPayload(packages), scope, scopeOther: scope.includes("other") ? scopeOther.trim() : null,
         transportation: Number(transport) || 0, gstRate, terms: terms.map(({ title, body }) => ({ title: title.trim(), body: body.trim() })),
         tofaaSignee: tofaaSignee.trim() || null, clientSignee: clientSignee.trim() || null, remarks: remarks.trim() || null,
       });
-      return true;
+      return res.data;
     } catch (err) {
       const fe = fieldErrors(err);
       if (Object.keys(fe).length) setErrors(fe);
@@ -150,7 +150,11 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
   async function save() {
     setBusy("save");
     try {
-      if (await saveDetails()) { toast.success("Agreement saved. The lead is in Agreement and Payment."); void deal.reload(); onDone(); onClose(); }
+      const saved = await saveDetails();
+      if (!saved) return;
+      if (saved.termsStatus === "pending") toast.info("Agreement saved. The custom terms were sent to your manager for approval.");
+      else toast.success("Agreement saved. The lead is in Agreement and Payment.");
+      void deal.reload(); onDone(); onClose();
     } finally { setBusy(null); }
   }
 
@@ -158,9 +162,14 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     if (!target) return;
     setBusy("pdf");
     try {
-      if (!(await saveDetails())) return;
+      const saved = await saveDetails();
+      if (!saved) return;
       void deal.reload();
       onDone();
+      if (saved.termsStatus === "pending") {
+        toast.info("Agreement saved. The custom terms were sent to your manager for approval; download the PDF once they approve.");
+        return;
+      }
       await openPdf(`/leads/${target.leadId}/agreement/pdf`);
     } catch (err) {
       toast.error(errorMessage(err));
@@ -174,6 +183,16 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
       ) : (
         <div className="space-y-5">
           <>
+              {ag?.termsStatus === "pending" && (
+                <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  The custom contract terms are waiting for your manager&apos;s approval. You can keep editing; the PDF can be downloaded once they are approved.
+                </p>
+              )}
+              {ag?.termsStatus === "rejected" && (
+                <p className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  Your manager rejected the custom contract terms{ag.termsNote ? `: ${ag.termsNote}` : "."} Change them and save again.
+                </p>
+              )}
               {/* requirement packages */}
               <section className="space-y-3">
                 <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">

@@ -41,7 +41,7 @@ export default function ClientsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <PageHeader title="Clients" />
+      <PageHeader title={role === "kam" ? "My Accounts" : "Clients"} />
       <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
         <SearchInput className="lg:w-60 xl:w-72 lg:min-w-0" value={search} onChange={setSearch} placeholder="Search" />
         <select className={select} value={tier} onChange={(e) => setTier(e.target.value)} aria-label="Tier">

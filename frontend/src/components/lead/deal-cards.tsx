@@ -130,7 +130,7 @@ export function MeetingNotesCard({ deal, closed, onAdd }: { deal: DealData | nul
 
 // --- quotes ---------------------------------------------------------------------------------------------------------
 
-const STATUS: Record<QuotationStatus, { label: string; tone: string }> = {
+export const QUOTE_STATUS: Record<QuotationStatus, { label: string; tone: string }> = {
   ready: { label: "Ready to send", tone: "bg-slate-100 text-slate-700" },
   pending_approval: { label: "Waiting for approval", tone: "bg-amber-100 text-amber-800" },
   approved: { label: "Approved", tone: "bg-emerald-100 text-emerald-800" },
@@ -155,7 +155,7 @@ export function QuotesCard({ deal, closed, onCreate, onSend }: { deal: DealData 
                 <div className="flex items-center gap-2.5">
                   <span className="text-sm font-semibold text-slate-500">v{q.version}</span>
                   <span className="text-base font-semibold text-slate-900">{inr(q.total)}</span>
-                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS[q.status].tone)}>{q.status === "sent" && q.sentVia ? `Sent by ${q.sentVia}` : STATUS[q.status].label}</span>
+                  <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", QUOTE_STATUS[q.status].tone)}>{q.status === "sent" && q.sentVia ? `Sent by ${q.sentVia}` : QUOTE_STATUS[q.status].label}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs" onClick={() => void openPdf(`/quotations/${q.id}/pdf`)}><Download className="h-3.5 w-3.5" /> PDF</Button>
@@ -256,7 +256,7 @@ export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onRelo
     <CardShell
       icon={FileSignature}
       title="Agreement & payment"
-      subtitle={pay?.status === "confirmed" ? "Paid" : ag?.details ? `Prepared · ${inr(ag.totalAmount ?? 0)}` : "Prepared, sent, invoiced, paid"}
+      subtitle={pay?.status === "confirmed" ? "Paid" : ag?.details ? `Prepared · ${inr(ag.totalAmount ?? 0)}${ag.termsStatus === "pending" ? " · terms waiting for approval" : ag.termsStatus === "rejected" ? " · terms rejected" : ""}` : "Prepared, sent, invoiced, paid"}
       action={
         <div className="flex items-center gap-1.5">
           {ag?.details && <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs" onClick={() => void openPdf(`/leads/${lead.id}/agreement/pdf`)}><Download className="h-3.5 w-3.5" /> PDF</Button>}

@@ -4,7 +4,6 @@ from datetime import date, datetime, time
 from decimal import Decimal
 
 from src.core import cache
-from src.core.access import team_ids
 from src.core.dates import IST, today_ist
 from src.core.errors import AppError, ForbiddenError, NotFoundError
 from src.core.audit import write_audit
@@ -146,7 +145,7 @@ def _may_manage(actor: Profile) -> list[str] | None:
     if actor.role == Role.ADMIN:
         return None
     if actor.role == Role.SALES_MANAGER:
-        return team_ids(actor)
+        return None  # managers set targets for every executive, like admins
     raise ForbiddenError("Only managers and admins set targets.")
 
 

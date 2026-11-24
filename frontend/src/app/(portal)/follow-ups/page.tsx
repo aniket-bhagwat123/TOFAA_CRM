@@ -9,6 +9,7 @@ import { FollowUpDoneSheet } from "@/components/followups/done-sheet";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
+import { Tooltip } from "@/components/ui/tooltip";
 import { StageBadge } from "@/components/ui/stage-badge";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
@@ -53,6 +54,7 @@ export default function FollowUpsPage() {
   const user = useAppSelector((s) => s.auth.session?.profile);
   const manager = !!user && isManager(user.role);
   const [owner, setOwner] = useState("");
+  const [clientRequested, setClientRequested] = useState(false);
   const [doneItem, setDoneItem] = useState<FollowUpItem | null>(null);
   const [clientTask, setClientTask] = useState<ClientTaskTarget | null>(null);
 
@@ -74,7 +76,11 @@ export default function FollowUpsPage() {
   const done = (f: FollowUpItem) =>
     f.isClientTask ? setClientTask({ taskId: f.id, companyId: f.companyId!, companyName: f.companyName, title: f.title }) : setDoneItem(f);
 
-  const data = view.data;
+  // "Client requested": the callbacks the client asked for (a "Call back later" call leaves one).
+  const isRequested = (f: FollowUpItem) => /client requested/i.test(f.title ?? "");
+  const data = view.data && clientRequested
+    ? { ...view.data, overdue: view.data.overdue.filter(isRequested), today: view.data.today.filter(isRequested), tomorrow: view.data.tomorrow.filter(isRequested), thisWeek: view.data.thisWeek.filter(isRequested) }
+    : view.data;
   const total = data ? data.overdue.length + data.today.length + data.tomorrow.length + data.thisWeek.length : 0;
 
   return (
@@ -85,6 +91,11 @@ export default function FollowUpsPage() {
         <p className="t-meta">
           {data ? (total ? <><b className="font-semibold text-slate-700">{total}</b> open follow-up{total === 1 ? "" : "s"} this week{data.overdue.length ? <> · <b className="font-semibold text-red-600">{data.overdue.length} overdue</b></> : null}</> : "Nothing due this week") : " "}
         </p>
+        <div className="flex flex-wrap items-center gap-2">
+        <button type="button" aria-pressed={clientRequested} onClick={() => setClientRequested((x) => !x)}
+          className={cn("pressable h-10 shrink-0 rounded-xl border px-4 text-sm font-medium", clientRequested ? "border-sky-300 bg-sky-50 text-sky-700" : "border-slate-300/80 bg-white text-slate-600")}>
+          Client requested
+        </button>
         {manager && user && (
           <select className={select} value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Owner">
             <option value="">Whole team</option>
@@ -92,6 +103,7 @@ export default function FollowUpsPage() {
             {people.data?.filter((p) => p.id !== user.id).map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
           </select>
         )}
+        </div>
       </div>
 
       {view.loading && !data ? (
@@ -99,7 +111,7 @@ export default function FollowUpsPage() {
       ) : view.error && !data ? (
         <StateView kind="error" message={view.error} onRetry={() => void view.reload()} />
       ) : data && total === 0 ? (
-        <StateView kind="empty" title="All caught up" message="No follow-ups are due this week. New ones appear here as you schedule them." />
+        <StateView kind="empty" title={clientRequested ? "No client-requested callbacks" : "All caught up"} message={clientRequested ? "Callbacks the client asked for (Call back later) show up here." : "No follow-ups are due this week. New ones appear here as you schedule them."} />
       ) : data ? (
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
           {COLUMNS.map((c) => (
@@ -159,7 +171,10 @@ function FollowUpCard({ f, when, late, onOpen, onCall, onWhatsApp, onDone }: Car
         <button type="button" aria-label="WhatsApp" disabled={!f.phone} onClick={onWhatsApp} className="pressable flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-35">
           <MessageCircle className="h-4 w-4" />
         </button>
-        <Button onClick={onDone} className="h-9 min-h-0 min-w-0 flex-1 px-3 text-[13px]"><CheckCircle2 className="h-4 w-4" /><span className="truncate">Follow-up done</span></Button>
+        {/* the label can be cut off on narrow cards: the tooltip shows it in full */}
+        <Tooltip label="Follow-up done" className="min-w-0 flex-1">
+          <Button onClick={onDone} aria-label="Follow-up done" className="h-9 min-h-0 w-full min-w-0 px-3 text-[13px]"><CheckCircle2 className="h-4 w-4 shrink-0" /><span className="truncate">Follow-up done</span></Button>
+        </Tooltip>
       </div>
     </article>
   );

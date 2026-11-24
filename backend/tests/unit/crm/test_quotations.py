@@ -66,10 +66,9 @@ def test_photos_must_belong_to_the_lead():
             service._check_photo_paths("lead-1", [schemas.PackageIn(name="A", unit_price=D("1"), quantity=D("1"), photos=[path])])
 
 
-def test_who_may_decide(monkeypatch):
+def test_who_may_decide():
     mgr = Profile(id="m1", role=Role.SALES_MANAGER)
-    monkeypatch.setattr(service, "team_ids", lambda actor: ["m1", "e1"])
-    assert service.can_decide(mgr, "e1") and not service.can_decide(mgr, "someone-else")
+    assert service.can_decide(mgr, "e1") and service.can_decide(mgr, "someone-else")  # managers decide for everyone
     assert service.can_decide(Profile(id="a", role=Role.ADMIN), "anyone")
     assert not service.can_decide(Profile(id="e1", role=Role.SALES_EXECUTIVE), "e1")  # nobody approves their own discount
 

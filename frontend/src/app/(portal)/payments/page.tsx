@@ -94,7 +94,9 @@ export default function PaymentsPage() {
             <div className="flex items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-400">
               <span>Requested by {p.requestedByName ?? "—"} · {formatDate(p.requestedAt)}</span>
               {p.status === "confirmed" ? (
-                <span className="inline-flex items-center gap-1 font-medium text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> {p.confirmedAt ? formatDate(p.confirmedAt) : "Done"}</span>
+                <span className="inline-flex items-center gap-1 font-medium text-emerald-600"><CheckCircle2 className="h-3.5 w-3.5" /> {p.confirmedAt ? formatDate(p.confirmedAt) : "Done"}
+                  {p.source && <span className={cn("ml-1 rounded-full px-1.5 py-px text-[10px] font-semibold uppercase", p.source === "erp" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")} title={p.source === "erp" ? "Confirmed automatically by the ERP" : "Confirmed by Finance"}>{p.source === "erp" ? "ERP synced" : "Manual"}</span>}
+                </span>
               ) : fallback ? (
                 <Button className="min-h-9 px-3 py-1.5 text-xs" onClick={() => setConfirming(p)}><BadgeCheck className="h-3.5 w-3.5" /> Confirm payment</Button>
               ) : (

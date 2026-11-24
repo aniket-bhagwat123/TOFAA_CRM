@@ -1,9 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from starlette.concurrency import run_in_threadpool
 
 from src.core.access import require_lead_role
+from src.core.pagination import PageDep
 from src.core.schema import ok
 from src.modules.auth.dependencies import CurrentUserDep, require_roles
 from src.modules.auth.schemas import Role
@@ -48,6 +49,12 @@ async def upload_photo(lead_id: str, user: CurrentUserDep, file: Annotated[Uploa
 def list_quotations(lead_id: str, user: CurrentUserDep):
     leads.get_lead_row(user, lead_id)
     return ok(service.list_quotations(lead_id))
+
+
+@router.get("/quotations")
+def all_quotations(user: CurrentUserDep, page: PageDep, status: str | None = None, owner_id: Annotated[str | None, Query(alias="ownerId")] = None):
+    require_lead_role(user)
+    return ok(service.list_all(user, page, status=status, owner_id=owner_id))
 
 
 @router.get("/quotations/{quotation_id}/pdf")

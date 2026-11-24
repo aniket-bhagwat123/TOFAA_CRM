@@ -42,7 +42,7 @@ export function BoardCard({ lead, showOwner, onDragStart, onOpen }: Props) {
       {(showCall || lead.dealValue || lead.valueBand || lead.source) && (
         <div className="flex flex-wrap gap-1.5">
           {showCall && <CallStatusBadge outcome={lead.lastCallOutcome} at={lead.lastCallAt} attempts={lead.callAttempts} />}
-          {showCall && <LeadTags tags={lead.tags} outcome={lead.lastCallOutcome} />}
+          {showCall && <LeadTags tags={lead.tags} outcome={lead.lastCallOutcome} cold={lead.cold} />}
           {(lead.dealValue || lead.valueBand) && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand" title={lead.valueSource ?? undefined}>{lead.dealValue ? inrShort(lead.dealValue) : BAND_LABEL[lead.valueBand!]}</span>}
           {lead.source && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{lead.source}</span>}
         </div>

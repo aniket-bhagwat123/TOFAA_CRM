@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from src.core.audit import write_audit
 from src.core.dates import now_ist, today_ist
-from src.core.errors import AppError, ConflictError
+from src.core.errors import AppError, ConflictError, ForbiddenError
 from src.core.money import format_inr, to_money
 from src.core.parallel import par
 from src.core.storage import DOCUMENTS, signed_urls
@@ -40,6 +40,7 @@ def state(lead_id: str) -> dict:
         details = {**details, "packages": [{**p, "photos": [{"path": x, "url": urls.get(x)} for x in (p.get("photos") or [])]} for p in details.get("packages") or []]}
     return {
         "details": details, "totalAmount": ag.get("total_amount"), "preparedAt": ag.get("prepared_at"),
+        "termsStatus": ag.get("terms_status") or "standard", "termsNote": ag.get("terms_note"),
         "options": {"scope": [{"value": k, "label": v} for k, v in schemas.SCOPE.items()], "gstRates": list(schemas.GST_RATES), "defaultTerms": schemas.DEFAULT_TERMS},
         "sentAt": ag.get("sent_at"), "signedAt": ag.get("signed_at"), "signedName": ag.get("signed_name"), "signedUrl": url,
         "invoiceNumber": ag.get("invoice_number"), "invoiceRaisedAt": ag.get("invoice_raised_at"), "paymentReceivedAt": ag.get("payment_received_at"),
@@ -85,17 +86,107 @@ def save_details(user: Profile, lead_id: str, body: schemas.AgreementDetails) ->
         "remarks": body.remarks, "totals": totals,
     }
     existing = get_service_client().table("agreements").select("*").eq("lead_id", lead_id).limit(1).execute().data
-    first = not (existing and existing[0].get("details"))
+    before = existing[0] if existing else {}
+    first = not before.get("details")
+    status = terms_status_for(user, details["terms"], before)
+    fields = {"details": details, "total_amount": totals["total"], "prepared_at": now_ist().isoformat(), "terms_status": status}
+    if status == "pending":
+        fields |= {"terms_decided_by": None, "terms_decided_at": None, "terms_note": None}
     try:
-        _upsert(lead_id, details=details, total_amount=totals["total"], prepared_at=now_ist().isoformat())
+        _upsert(lead_id, **fields)
     except Exception as exc:
-        if "details" in str(exc) or "total_amount" in str(exc) or "prepared_at" in str(exc):
+        text = str(exc)
+        if "terms_" in text and "details" not in text:
+            # Before migration 20260114000000_menu_v2.sql there is no terms approval: save the agreement as it is.
+            log.warning("agreements.terms_status missing; saving without terms approval")
+            status = "standard"
+            _upsert(lead_id, details=details, total_amount=totals["total"], prepared_at=fields["prepared_at"])
+        elif "details" in text or "total_amount" in text or "prepared_at" in text:
             raise AppError(DETAILS_NOT_READY, status_code=503) from exc
-        raise
-    add_activity(lead_id, user.id, "agreement", outcome="prepared", note=f"Agreement {'prepared' if first else 'updated'}: {format_inr(totals['total'])}")
+        else:
+            raise
+    add_activity(lead_id, user.id, "agreement", outcome="prepared", note=f"Agreement {'prepared' if first else 'updated'}: {format_inr(totals['total'])}"
+                 + (" (custom terms sent for approval)" if status == "pending" and before.get("terms_status") != "pending" else ""))
+    if status == "pending" and before.get("terms_status") != "pending":
+        for a in _approvers(lead.get("owner_id")):
+            notify(a, f"terms:{lead_id}", "Agreement terms need approval", f"{lead['company']['name']}: custom contract terms", "/approvals")
     # Preparing the agreement is the action that moves the lead to Agreement and Payment.
     leads.auto_advance(lead, "agreement_payment", user.id, "Agreement prepared")
     write_audit(user.id, "prepare", "agreements", lead_id, {"total": totals["total"]})
+    return state(lead_id)
+
+
+# --- terms approval --------------------------------------------------------------------------------------------------
+
+def _terms_key(terms: list[dict]) -> list[tuple[str, str]]:
+    return [((t.get("title") or "").strip(), (t.get("body") or "").strip()) for t in terms]
+
+
+def terms_status_for(user: Profile, terms: list[dict], before: dict) -> str:
+    """Standard terms need nobody. Changed or extra terms from an executive wait for a manager, unless they are exactly
+    the terms already approved. Managers and admins approve their own."""
+    if _terms_key(terms) == _terms_key(schemas.DEFAULT_TERMS):
+        return "standard"
+    if user.role in (Role.SALES_MANAGER, Role.ADMIN):
+        return "approved"
+    old = before.get("details") or {}
+    if before.get("terms_status") == "approved" and _terms_key(old.get("terms") or []) == _terms_key(terms):
+        return "approved"
+    return "pending"
+
+
+def _approvers(owner_id: str | None) -> list[str]:
+    db = get_service_client()
+    ids = {r["id"] for r in db.table("profiles").select("id").eq("role", Role.ADMIN.value).eq("is_active", True).execute().data}
+    if owner_id:
+        mgr = db.table("profiles").select("manager_id").eq("id", owner_id).limit(1).execute().data
+        if mgr and mgr[0].get("manager_id"):
+            ids.add(mgr[0]["manager_id"])
+    ids.discard(owner_id)
+    return list(ids)
+
+
+def pending_terms(user: Profile) -> list[dict]:
+    """Agreements whose custom terms wait for this manager (their team) or any admin."""
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
+        raise ForbiddenError()
+    try:
+        rows = (
+            get_service_client().table("agreements").select("lead_id,details,total_amount,prepared_at,lead:leads(id,owner_id,company:companies(name),contact:contacts(name),owner:profiles!owner_id(full_name))")
+            .eq("terms_status", "pending").order("prepared_at").limit(100).execute().data
+        )
+    except Exception:  # noqa: BLE001 - before the migration nothing can be pending
+        return []
+    scope = None  # managers and admins see every agreement waiting, whoever owns the deal
+    defaults = {t for t in _terms_key(schemas.DEFAULT_TERMS)}
+    out = []
+    for r in rows:
+        lead = r.get("lead") or {}
+        if scope is not None and lead.get("owner_id") not in scope:
+            continue
+        terms = (r.get("details") or {}).get("terms") or []
+        out.append({
+            "leadId": r["lead_id"], "companyName": (lead.get("company") or {}).get("name"), "contactName": (lead.get("contact") or {}).get("name"),
+            "ownerName": (lead.get("owner") or {}).get("full_name"), "total": r.get("total_amount"), "preparedAt": r.get("prepared_at"),
+            "terms": [{**t, "custom": (t.get("title", "").strip(), t.get("body", "").strip()) not in defaults} for t in terms],
+        })
+    return out
+
+
+def decide_terms(user: Profile, lead_id: str, approve: bool, note: str | None) -> dict:
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
+        raise ForbiddenError("Only the owner's manager or an admin can decide this.")
+    lead = leads.get_lead_row(user, lead_id)
+    rows = get_service_client().table("agreements").select("terms_status").eq("lead_id", lead_id).limit(1).execute().data
+    if not rows or rows[0].get("terms_status") != "pending":
+        raise AppError("These terms are not waiting for approval.", status_code=409)
+    status = "approved" if approve else "rejected"
+    _upsert(lead_id, terms_status=status, terms_decided_by=user.id, terms_decided_at=now_ist().isoformat(), terms_note=note)
+    verdict = "approved" if approve else "rejected"
+    add_activity(lead_id, user.id, "agreement", outcome=f"terms_{verdict}", note=f"Custom contract terms {verdict}" + (f": {note}" if note else ""))
+    if lead.get("owner_id"):
+        notify(lead["owner_id"], f"terms-decision:{lead_id}", f"Agreement terms {verdict}", f"{lead['company']['name']}" + (f": {note}" if note else ""), f"/leads/{lead_id}")
+    write_audit(user.id, "terms_decision", "agreements", lead_id, {"status": status})
     return state(lead_id)
 
 
@@ -107,6 +198,13 @@ def make_pdf(user: Profile, lead_id: str) -> tuple[bytes, str]:
     details = (rows[0] if rows else {}).get("details")
     if not details:
         raise AppError("Prepare the agreement first, then download it.", status_code=409)
+    terms = (rows[0] or {}).get("terms_status")
+    if terms in ("pending", "rejected") and user.role == Role.SALES_EXECUTIVE:
+        raise AppError(
+            "The custom contract terms are waiting for your manager's approval." if terms == "pending"
+            else "Your manager rejected the custom contract terms. Change them and save again.",
+            status_code=409,
+        )
     number = f"A-{lead_id.replace('-', '')[:6].upper()}"
     data = pdf.render(number=number, created=today_ist(), lead=lead, details=details, scope_labels=schemas.SCOPE)
     return data, number

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { OccasionCalendarTab } from "@/components/clients/occasion-calendar-tab";
 import { QuotationTemplateTab } from "@/components/crm/quotation-template-tab";
+import { ErpTab, ListsTab, RulesTab } from "@/components/settings/rules-tabs";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { InputField, TextareaField } from "@/components/ui/input-field";
@@ -18,7 +19,7 @@ import type { StageConfig } from "@/types/crm";
 
 type Usage = { month: string; apiEnabled: boolean; messagesOut: number; messagesIn: number; clickToChatSent: number; conversations: number; estimatedCost: number };
 type Template = { id: string; name: string; purpose: string; body: string; approved: boolean };
-const TABS = ["Pipeline", "Quotation", "Occasions", "WhatsApp"] as const; // people are managed in Users
+const TABS = ["Pipeline", "Rules", "Lists", "Quotation", "Occasions", "WhatsApp", "ERP"] as const; // people and targets are managed in Users
 
 function PipelineTab() {
   const stages = useApi<StageConfig[]>("/stages");
@@ -136,15 +137,18 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4">
       <PageHeader title="Settings" />
-      <div className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm">
+      <div className="flex gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1 text-sm">
         {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={cn("flex-1 rounded-md px-3 py-1.5 font-medium", tab === t ? "bg-white shadow-sm" : "text-slate-500")}>{t}</button>
+          <button key={t} onClick={() => setTab(t)} className={cn("flex-1 shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 font-medium", tab === t ? "bg-white shadow-sm" : "text-slate-500")}>{t}</button>
         ))}
       </div>
       {tab === "Pipeline" && <PipelineTab />}
       {tab === "Quotation" && <QuotationTemplateTab />}
       {tab === "Occasions" && <OccasionCalendarTab />}
       {tab === "WhatsApp" && <WhatsAppTab />}
+      {tab === "Rules" && <RulesTab />}
+      {tab === "Lists" && <ListsTab />}
+      {tab === "ERP" && <ErpTab />}
     </div>
   );
 }

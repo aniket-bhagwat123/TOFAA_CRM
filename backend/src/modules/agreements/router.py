@@ -9,6 +9,23 @@ from src.modules.auth.dependencies import CurrentUserDep
 from src.modules.leads import service as leads
 
 router = APIRouter(prefix="/leads", tags=["agreement"])
+approvals_router = APIRouter(prefix="/approvals", tags=["agreement"])
+
+
+class TermsDecision(CamelModel):
+    approve: bool
+    note: str | None = Field(default=None, max_length=500)
+
+
+@approvals_router.get("/agreements")
+def pending_terms(user: CurrentUserDep):
+    """Agreements whose custom contract terms wait for a manager."""
+    return ok(service.pending_terms(user))
+
+
+@router.post("/{lead_id}/agreement/terms-decision")
+def terms_decision(lead_id: str, body: TermsDecision, user: CurrentUserDep):
+    return ok(service.decide_terms(user, lead_id, body.approve, body.note), "Decision saved.")
 
 
 class PaymentRequestIn(CamelModel):

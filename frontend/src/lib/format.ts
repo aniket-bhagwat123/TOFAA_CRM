@@ -54,7 +54,7 @@ export const OUTCOME_LABEL: Record<string, string> = {
   wrong_number: "Wrong number",
 };
 /** Lead tags set by call outcomes. */
-export const TAG_LABEL: Record<string, string> = { nurture: "Nurture" };
+export const TAG_LABEL: Record<string, string> = { nurture: "Nurture", cold: "Cold" };
 
 /** Today in IST as YYYY-MM-DD (the CRM works in Indian time). */
 export function todayIso(offsetDays = 0): string {

@@ -8,10 +8,10 @@ from src.core.access import require_lead_role, visible_owner_ids
 from src.core.errors import ForbiddenError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
-from src.modules.auth.schemas import Profile
+from src.modules.auth.schemas import Profile, Role
 
 PAGE = 30
-KINDS = {"call", "whatsapp", "meeting", "note", "stage_change", "reassign", "task", "created", "import", "mom", "quotation", "agreement", "payment", "client", "campaign", "sample"}
+KINDS = {"call", "whatsapp", "meeting", "note", "stage_change", "reassign", "task", "created", "import", "mom", "quotation", "agreement", "payment", "client", "campaign", "sample", "order"}
 LEAD_EMBED = "lead:leads!inner(id,owner_id,pipeline,project_title,company_id,company:companies(name))"
 COMPANY_EMBED = "company:companies!inner(id,name,account_owner_id)"
 
@@ -23,6 +23,9 @@ def merge(a: list[dict], b: list[dict], limit: int) -> list[dict]:
 
 def feed(user: Profile, *, before: str | None, kind: str | None, owner_id: str | None, lead_id: str | None, company_id: str | None) -> dict:
     require_lead_role(user)
+    if user.role in (Role.SALES_EXECUTIVE, Role.KAM):
+        # Role rules: executives and KAMs never see Activity (their own lead pages still show each lead's timeline).
+        raise ForbiddenError("Activity is for managers and admins.")
     params = {"b": before, "k": kind, "o": owner_id, "l": lead_id, "c": company_id}
     return cache.memo("activity-feed", user.id, params, 15, lambda: _feed(user, before, kind, owner_id, lead_id, company_id))
 

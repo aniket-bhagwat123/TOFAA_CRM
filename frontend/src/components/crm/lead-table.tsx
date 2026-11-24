@@ -1,6 +1,8 @@
 "use client";
 import { Bell, CalendarPlus, Check, ChevronDown, ExternalLink, Flag, History, MapPin, MessageCircle, MoreHorizontal, Pencil, Phone, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { seesActivity } from "@/lib/roles";
+import { useAppSelector } from "@/store/hooks";
 import { useRef, useState, type MouseEvent } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Popover } from "@/components/ui/popover";
@@ -77,7 +79,7 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
                   </div>
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}><StageCell lead={l} target={t} closed={closed} actions={actions} /></TableCell>
-                {showCalls && <TableCell><div className="flex max-w-[14rem] flex-wrap gap-1"><CallStatusBadge outcome={l.lastCallOutcome} at={l.lastCallAt} attempts={l.callAttempts} className="text-xs" />{!["closed_won", "closed_lost"].includes(l.stage) && <LeadTags tags={l.tags} outcome={l.lastCallOutcome} />}</div></TableCell>}
+                {showCalls && <TableCell><div className="flex max-w-[14rem] flex-wrap gap-1"><CallStatusBadge outcome={l.lastCallOutcome} at={l.lastCallAt} attempts={l.callAttempts} className="text-xs" />{!["closed_won", "closed_lost"].includes(l.stage) && <LeadTags tags={l.tags} outcome={l.lastCallOutcome} cold={l.cold} />}</div></TableCell>}
                 <TableCell>
                   {maps ? (
                     <a href={maps} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} title="Open in Google Maps" className="pressable inline-flex max-w-[11rem] items-center gap-1.5 rounded-full bg-sky-50 py-1.5 pl-2.5 pr-3 text-xs font-medium text-sky-700 hover:bg-sky-100">
@@ -122,6 +124,7 @@ export function RowMenu({ lead, target, closed, canReassign, actions }: { lead: 
   const [open, setOpen] = useState(false);
   const item = "pressable flex w-full items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100";
   const run = (fn: () => void) => () => { setOpen(false); fn(); };
+  const canSeeActivity = seesActivity(useAppSelector((st) => st.auth.session?.profile.role)); // executives and KAMs never see Activity
   return (
     <>
       <Tooltip label="More actions">
@@ -134,7 +137,7 @@ export function RowMenu({ lead, target, closed, canReassign, actions }: { lead: 
           <button role="menuitem" type="button" className={item} onClick={run(() => router.push(dealHref(lead)))}><ExternalLink className="h-4 w-4 text-slate-400" /> {lead.pipeline === "client" ? "Open project" : "Open lead"}</button>
           {!closed && <button role="menuitem" type="button" className={item} onClick={run(() => actions.meeting(target))}><CalendarPlus className="h-4 w-4 text-slate-400" /> Schedule meeting</button>}
           {!closed && <button role="menuitem" type="button" className={item} onClick={run(() => actions.schedule(target))}><Bell className="h-4 w-4 text-slate-400" /> Set reminder</button>}
-          <button role="menuitem" type="button" className={item} onClick={run(() => router.push(`/activity?lead=${lead.id}`))}><History className="h-4 w-4 text-slate-400" /> View activity</button>
+          {canSeeActivity && <button role="menuitem" type="button" className={item} onClick={run(() => router.push(`/activity?lead=${lead.id}`))}><History className="h-4 w-4 text-slate-400" /> View activity</button>}
           {canReassign && <button role="menuitem" type="button" className={item} onClick={run(() => actions.reassign(target))}><UserCog className="h-4 w-4 text-slate-400" /> Reassign</button>}
           {!closed && <button role="menuitem" type="button" className={cn(item, "text-red-600")} onClick={run(() => actions.close(target))}><Flag className="h-4 w-4" /> Close lead</button>}
         </div>

@@ -13,7 +13,12 @@ const TITLES: [string, string][] = [
   ["/projects", "Projects"],
   ["/clients", "Clients"],
   ["/activity", "Activity"],
-  ["/team", "Team"],
+  ["/dashboard", "Dashboard"],
+  ["/quotations", "Quotations"],
+  ["/orders", "Orders"],
+  ["/approvals", "Approvals"],
+  ["/reports", "Reports"],
+  ["/my-target", "My Target"],
   ["/users", "Users"],
   ["/settings", "Settings"],
   ["/payments", "Payments"],
@@ -41,7 +46,7 @@ export function Topbar({ user }: { user: Profile }) {
           <span className="truncate font-semibold tracking-tight text-slate-900" aria-current="page">{crumb.label}</span>
         </nav>
       ) : (
-        <div className="min-w-0 truncate text-base font-semibold tracking-tight text-slate-900">{titleFor(path)}</div>
+        <div className="min-w-0 truncate text-base font-semibold tracking-tight text-slate-900">{user.role === "kam" && path === "/clients" ? "My Accounts" : titleFor(path)}</div>
       )}
       <UserMenu user={user} />
     </header>

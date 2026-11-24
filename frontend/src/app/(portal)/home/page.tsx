@@ -5,7 +5,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { homeFor } from "@/lib/roles";
 import { useAppSelector } from "@/store/hooks";
 
-/** Executives land on Today, managers and admins on Team. */
+/** Executives land on Today, managers and admins on the Dashboard. */
 export default function HomePage() {
   const role = useAppSelector((s) => s.auth.session?.profile.role);
   const router = useRouter();

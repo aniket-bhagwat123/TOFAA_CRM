@@ -5,7 +5,6 @@ from datetime import datetime
 from decimal import Decimal
 from html import escape
 
-from src.core.access import team_ids
 from src.core.audit import write_audit
 from src.core.config import settings
 from src.core.dates import IST, now_ist, today_ist
@@ -56,7 +55,7 @@ def quote_number(lead_id: str, version: int) -> str:
 def can_decide(actor: Profile, owner_id: str | None) -> bool:
     if actor.role == Role.ADMIN:
         return True
-    return actor.role == Role.SALES_MANAGER and owner_id in team_ids(actor)
+    return actor.role == Role.SALES_MANAGER  # managers decide for everyone, like admins
 
 
 # --- templates --------------------------------------------------------------------------------------------------------
@@ -226,6 +225,35 @@ def create_quotation(user: Profile, lead_id: str, body: schemas.QuotationCreate)
     return {**q, "number": quote_number(lead_id, version), "needs_approval": status == "pending_approval"}
 
 
+def list_all(user: Profile, page, *, status: str | None = None, owner_id: str | None = None) -> dict:
+    """Every quotation the user may see (newest first), with its lead, for the Quotations screen."""
+    from src.core.access import visible_owner_ids
+    from src.core.pagination import page_meta
+
+    owners = visible_owner_ids(user)
+    if owner_id:
+        owners = [owner_id] if owners is None or owner_id in owners else ["00000000-0000-0000-0000-000000000000"]
+    db = get_service_client()
+    q = db.table("quotations").select(
+        "id,lead_id,version,status,total,subtotal,discount_pct,created_at,sent_at,sent_via,author:profiles!created_by(full_name),"
+        "lead:leads!inner(id,stage,pipeline,owner_id,company_id,contact_id,company:companies(name),contact:contacts(name),owner:profiles!owner_id(full_name))",
+        count="exact",
+    )
+    if owners is not None:
+        q = q.in_("lead.owner_id", owners)
+    if status in ("ready", "pending_approval", "approved", "rejected", "sent"):
+        q = q.eq("status", status)
+    if page.search and page.search.strip():
+        companies, contacts = leads._matching_ids(page.search)
+        clauses = ([f"company_id.in.({','.join(companies)})"] if companies else []) + ([f"contact_id.in.({','.join(contacts)})"] if contacts else [])
+        q = q.or_(",".join(clauses), reference_table="lead") if clauses else q.eq("lead.company_id", "00000000-0000-0000-0000-000000000000")
+    res = q.order("created_at", desc=True).range(page.start, page.end).execute()
+    rows = res.data
+    for r in rows:
+        r["number"] = quote_number(r["lead_id"], r["version"])
+    return {"items": rows, "meta": page_meta(page, res.count or 0)}
+
+
 def list_quotations(lead_id: str) -> list[dict]:
     db = get_service_client()
     rows = db.table("quotations").select("*, author:profiles!created_by(full_name)").eq("lead_id", lead_id).order("version", desc=True).limit(30).execute().data
@@ -284,7 +312,7 @@ def pending_approvals(user: Profile) -> list[dict]:
     db = get_service_client()
     q = db.table("quotations").select("*, author:profiles!created_by(full_name), lead:leads(id,owner_id,company:companies(name),contact:contacts(name))").eq("status", "pending_approval")
     rows = q.order("created_at").limit(100).execute().data
-    scope = None if user.role == Role.ADMIN else team_ids(user)
+    scope = None  # managers and admins see every request
     out = []
     for r in rows:
         lead = r.pop("lead", None) or {}

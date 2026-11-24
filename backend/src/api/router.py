@@ -3,7 +3,12 @@ from fastapi import APIRouter
 from src.modules.activities.router import router as activities_router
 from src.modules.activity_feed.router import router as activity_feed_router
 from src.modules.projects.router import router as projects_router
+from src.modules.agreements.router import approvals_router as agreement_approvals_router
 from src.modules.agreements.router import router as agreements_router
+from src.modules.app_config.router import router as app_config_router
+from src.modules.dashboard.router import router as dashboard_router
+from src.modules.orders.router import router as orders_router
+from src.modules.reports.router import router as reports_router
 from src.modules.samples.router import router as samples_router
 from src.modules.auth.router import router as auth_router
 from src.modules.clients.router import router as clients_router
@@ -40,6 +45,11 @@ api_router.include_router(stages_router)
 api_router.include_router(quotations_router)
 api_router.include_router(minutes_router)
 api_router.include_router(agreements_router)
+api_router.include_router(agreement_approvals_router)
+api_router.include_router(app_config_router)
+api_router.include_router(orders_router)
+api_router.include_router(dashboard_router)
+api_router.include_router(reports_router)
 api_router.include_router(samples_router)
 api_router.include_router(payments_router)
 api_router.include_router(deal_router)

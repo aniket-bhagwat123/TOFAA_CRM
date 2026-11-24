@@ -40,13 +40,14 @@ function effect(o: string, attempts: number, newPhone: boolean): string {
 type Props = {
   target: LeadTarget | null;
   lostReasons?: string[];
+  rules?: { retry: { maxAttempts: number; gapDays: number }; nurtureDays: number } | null; // Settings > Rules: default dates
   onClose: () => void;
   onDone: () => void;
   onMarkLost?: (t: LeadTarget) => void; // kept for callers; closing is now part of the outcome
 };
 
 /** After a call: what happened, and what that means for the lead. Built to finish in under 20 seconds. */
-export function QuickLogSheet({ target, lostReasons = [], onClose, onDone }: Props) {
+export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone }: Props) {
   const [outcome, setOutcome] = useState<string>("");
   const [note, setNote] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -67,10 +68,17 @@ export function QuickLogSheet({ target, lostReasons = [], onClose, onDone }: Pro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target]);
 
+  /** The suggested next date for an outcome: the retry gap after "Not reachable", the Nurture days after "Future requirement". */
+  function defaultDate(o: string): string {
+    if (o === "not_reachable" && rules?.retry.gapDays) return todayIso(rules.retry.gapDays);
+    if (o === "future_requirement" && rules?.nurtureDays) return todayIso(rules.nurtureDays);
+    return nextBusinessDayIso();
+  }
+
   function pick(o: string) {
     setOutcome(o);
     setErrors({});
-    if (NEEDS_DATE.has(o)) setDate((d) => d || nextBusinessDayIso());
+    if (NEEDS_DATE.has(o)) setDate(defaultDate(o));
   }
 
   function close() {

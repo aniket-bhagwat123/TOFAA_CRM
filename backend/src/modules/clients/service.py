@@ -319,8 +319,8 @@ def update_client(user: Profile, company_id: str, body: schemas.ClientUpdate) ->
         if scope is not None and body.account_owner_id not in scope:
             raise ForbiddenError("You can only assign clients to your own team.")
         target = db.table("profiles").select("id,role,is_active,full_name").eq("id", body.account_owner_id).limit(1).execute().data
-        if not target or not target[0]["is_active"] or target[0]["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value):
-            raise AppError("Pick an active sales executive or manager.", status_code=422)
+        if not target or not target[0]["is_active"] or target[0]["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value, Role.KAM.value):
+            raise AppError("Pick an active sales executive, manager or key account manager.", status_code=422)
         patch["account_owner_id"] = body.account_owner_id
         # The new owner takes over what is in progress: open projects and open client follow-ups.
         par(

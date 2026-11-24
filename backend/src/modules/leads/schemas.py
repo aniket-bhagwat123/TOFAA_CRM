@@ -4,7 +4,7 @@ from pydantic import Field, field_validator, model_validator
 
 from src.core.schema import CamelModel
 from src.core.validators import Email, clean_phone
-from src.modules.leads.stages import ALL_STAGES, LOST_REASONS, VALUE_BANDS
+from src.modules.leads.stages import ALL_STAGES, VALUE_BANDS
 
 
 def _blank_to_none(v):
@@ -99,7 +99,10 @@ class StageMove(CamelModel):
     @field_validator("lost_reason")
     @classmethod
     def _reason(cls, v):
-        if v and v not in LOST_REASONS:
+        from src.core import app_settings
+
+        # The list is edited in Settings; "Invalid contact" is always allowed (a Wrong contact call closes with it).
+        if v and v not in app_settings.lost_reasons() and v != "Invalid contact":
             raise ValueError("Pick a reason from the list.")
         return v
 
