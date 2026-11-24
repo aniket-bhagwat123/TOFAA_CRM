@@ -72,7 +72,8 @@ def _search_words(term: str) -> list[str]:
 
 def _matching_ids(term: str) -> tuple[list[str], list[str]]:
     """(companies whose name matches, contacts whose name matches). Every word must appear, in any order, so
-    "Logistics 1" finds "Vanguard Logistics Pvt. Ltd 1" and "mane pankaj" finds "Pankaj Mane"."""
+    "Logistics 1" finds "Vanguard Logistics Pvt. Ltd 1" and "mane pankaj" finds "Pankaj Mane".
+    A search that is only a number (4+ digits) matches the contact's phone or second phone instead."""
     words = _search_words(term)
     if not words:
         return [], []
@@ -84,6 +85,13 @@ def _matching_ids(term: str) -> tuple[list[str], list[str]]:
             q = q.ilike("name", f"%{w}%")
         return q.limit(300).execute().data
 
+    digits = re.sub(r"\D", "", term)
+    if len(digits) >= 4 and len(digits) >= len(re.sub(r"[\s+\-()]", "", term)):  # a phone number (or part of one)
+        tail = digits[-10:]
+        contacts = (
+            db.table("contacts").select("id").or_(f"phone.ilike.%{tail}%,alt_phone.ilike.%{tail}%").limit(300).execute().data
+        )
+        return [], [r["id"] for r in contacts]
     companies, contacts = par(lambda: by_words("companies"), lambda: by_words("contacts"))
     return [r["id"] for r in companies], [r["id"] for r in contacts]
 

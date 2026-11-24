@@ -236,7 +236,25 @@ export type Campaign = { id: string; name: string; occasion: string; occursOn?: 
 
 export type FollowUpItem = TaskItem & {
   ownerId?: string | null;
+  dueAt?: string | null; // the due time, when one is set (a snooze "In 2 hrs", a callback time)
+  snoozeCount?: number; // 3 or more: "Repeatedly postponed"
+  clientRequested?: boolean; // the client asked for this callback ("Call back later")
+  ownerName?: string | null;
+  companyKind?: "direct" | "os" | null; // shown on client follow-ups instead of a stage
+  ownerAvatarUrl?: string | null;
+  callAttempts?: number; // info line: "Attempt 3 of 6"
+  maxAttempts?: number;
+  temperature?: "warm" | "cold";
+  nurture?: boolean;
+  dealValue?: number | null;
+  doneAt?: string | null; // the Done view
+  outcome?: string | null;
   meeting?: { id: string; startsAt: string; kind: "physical" | "online"; location?: string | null; link?: string | null } | null;
 };
 
-export type FollowUpsView = { date: string; overdue: FollowUpItem[]; today: FollowUpItem[]; tomorrow: FollowUpItem[]; thisWeek: FollowUpItem[] };
+export type FollowUpCounts = { open: number; week: number; overdue: number; noNextAction?: number };
+export type NoNextActionRow = NoNextAction & { ownerName?: string | null; companyKind?: "direct" | "os" | null };
+export type FollowUpsView = {
+  date: string; overdue: FollowUpItem[]; today: FollowUpItem[]; tomorrow: FollowUpItem[]; laterThisWeek: FollowUpItem[]; later: FollowUpItem[];
+  doneToday?: FollowUpItem[]; noNextAction?: NoNextActionRow[]; counts?: FollowUpCounts;
+};

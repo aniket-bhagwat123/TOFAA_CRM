@@ -5,8 +5,10 @@ import { setProfile } from "@/features/auth/auth.slice";
 import { apiClient } from "@/services/api-client";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { Profile } from "@/types/api";
+import { ReminderCenter } from "../followups/reminder-center";
 import { Spinner } from "../ui/spinner";
 import { BottomNav } from "./bottom-nav";
+import { navFor } from "./nav";
 import { SessionGuards } from "./session-guards";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -44,6 +46,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
       </div>
       <BottomNav user={session.profile} />
       <SessionGuards />
+      {/* Ringing reminders for anyone who has Follow-ups in their menu */}
+      <ReminderCenter enabled={navFor(session.profile.role).some((i) => i.href === "/follow-ups")} />
     </div>
   );
 }

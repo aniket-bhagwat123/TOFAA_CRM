@@ -53,6 +53,7 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
   const [newPhone, setNewPhone] = useState("");
   const [newName, setNewName] = useState("");
   const [date, setDate] = useState(nextBusinessDayIso());
+  const [time, setTime] = useState(""); // optional: when the client asked to be called back
   const [when, setWhen] = useState(DEFAULT_MEETING());
   const [kind, setKind] = useState("physical");
   const [place, setPlace] = useState("");
@@ -82,7 +83,7 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
   }
 
   function close() {
-    setOutcome(""); setNote(""); setNewPhone(""); setNewName(""); setDate(nextBusinessDayIso());
+    setOutcome(""); setNote(""); setNewPhone(""); setNewName(""); setDate(nextBusinessDayIso()); setTime("");
     setWhen(DEFAULT_MEETING()); setKind("physical"); setPlace(""); setReason(""); setErrors({});
     onClose();
   }
@@ -109,6 +110,8 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
         outcome,
         note: note.trim() || null,
         nextFollowUp: showDate && date ? date : null,
+        nextFollowUpTime: showDate && date && outcome === "call_back_later" && time ? time : null,
+        taskId: target.taskId ?? null,
         newPhone: swapping ? normalizePhone10(newPhone) : null,
         newName: swapping ? newName.trim() || null : null,
         lostReason: outcome === "not_interested" ? reason : null,
@@ -232,6 +235,7 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
             error={errors.nextFollowUp}
           />
         )}
+        {outcome === "call_back_later" && <TimePicker label="Call back at (optional)" value={time} onChange={setTime} placeholder="Any time" />}
         <VoiceTextarea label="Note (optional)" value={note} onChange={setNote} rows={2} placeholder="Write a note" />
         <Button onClick={save} loading={busy} variant={saveLabel === "Save and close as lost" ? "danger" : "primary"} className="w-full">{saveLabel}</Button>
       </div>

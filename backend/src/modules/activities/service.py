@@ -1,7 +1,8 @@
 import logging
+from datetime import datetime
 
 from src.core import app_settings
-from src.core.dates import now_ist
+from src.core.dates import IST, now_ist
 from src.core.errors import AppError
 from src.core.keys import normalize_phone10, phone_key
 from src.core.parallel import par
@@ -94,7 +95,10 @@ def log_call(user: Profile, lead_id: str, body: CallLog) -> dict:
     if open_lead and not close_reason and o != O.INTERESTED:  # closing clears the tasks; a meeting sets its own
         if body.next_follow_up:
             title, kind = TASK.get(o, (None, "follow_up"))
-            steps.append(lambda: tasks.set_next_action(lead_id, lead["owner_id"], body.next_follow_up, title, kind=kind))
+            due_at = datetime.combine(body.next_follow_up, body.next_follow_up_time, tzinfo=IST) if body.next_follow_up_time else None
+            steps.append(lambda: tasks.set_next_action(
+                lead_id, lead["owner_id"], body.next_follow_up, title, kind=kind, due_at=due_at, client_requested=o == O.CALL_BACK_LATER,
+            ))
         else:
             steps.append(lambda: tasks.close_open_tasks(lead_id, o.value))
     status_saved = par(*steps)[1]
@@ -107,6 +111,8 @@ def log_call(user: Profile, lead_id: str, body: CallLog) -> dict:
             meetings.create_meeting(user, lead_id, body.meeting)
         if close_reason:
             leads.move_stage(user, lead_id, StageMove(stage="closed_lost", lost_reason=close_reason))
+    if body.task_id:  # last: the steps above close open tasks as "superseded" / "closed"
+        tasks.finish_task(lead_id, body.task_id, o.value)
 
     stage = leads.get_lead_row(user, lead_id)["stage"] if open_lead else lead["stage"]
     return {

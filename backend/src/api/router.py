@@ -7,6 +7,7 @@ from src.modules.agreements.router import approvals_router as agreement_approval
 from src.modules.agreements.router import router as agreements_router
 from src.modules.app_config.router import router as app_config_router
 from src.modules.dashboard.router import router as dashboard_router
+from src.modules.share.router import router as share_router
 from src.modules.orders.router import router as orders_router
 from src.modules.reports.router import router as reports_router
 from src.modules.samples.router import router as samples_router
@@ -49,6 +50,7 @@ api_router.include_router(agreement_approvals_router)
 api_router.include_router(app_config_router)
 api_router.include_router(orders_router)
 api_router.include_router(dashboard_router)
+api_router.include_router(share_router)
 api_router.include_router(reports_router)
 api_router.include_router(samples_router)
 api_router.include_router(payments_router)

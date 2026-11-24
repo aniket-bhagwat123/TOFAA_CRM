@@ -85,12 +85,7 @@ export function MinutesSheet({ target, onClose, onDone }: Props) {
   return (
     <Sheet open={!!target} title="Minutes of meeting" subtitle={target?.name} icon={NotebookPen} tone="indigo" onClose={onClose} width="lg">
       <div className="space-y-4">
-        <VoiceTextarea label="Summary" required value={note} onChange={(v) => { setNote(v); clear("note"); }} rows={4} placeholder="Write the summary" />
-        {errors.note && <p role="alert" className="-mt-2 text-xs font-medium text-red-600">{errors.note}</p>}
-        <DocumentPicker label="Attach the minutes (optional)" file={file} onChange={setFile} />
-
-        <div className="border-t border-slate-100 pt-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">What the client needs</h3>
+        <div>
           <div className="grid gap-4 sm:grid-cols-2">
             <InputField label="Occasion" value={occasion} onChange={(e) => { setOccasion(e.target.value); clear("occasion"); }} error={errors.occasion} />
             <DatePicker label="Delivery date" min={todayIso()} value={delivery} onChange={(d) => { setDelivery(d); clear("deliveryDate"); }} error={errors.deliveryDate} />
@@ -99,6 +94,13 @@ export function MinutesSheet({ target, onClose, onDone }: Props) {
           </div>
         </div>
         <DateChips label="Next follow-up" value={follow} onChange={(d) => { setFollow(d); clear("nextFollowUp"); }} error={errors.nextFollowUp} />
+
+        {/* the minutes themselves, at the end of the form */}
+        <div className="space-y-4 border-t border-slate-100 pt-4">
+          <VoiceTextarea label="Summary" required value={note} onChange={(v) => { setNote(v); clear("note"); }} rows={4} placeholder="Write the summary" />
+          {errors.note && <p role="alert" className="-mt-2 text-xs font-medium text-red-600">{errors.note}</p>}
+          <DocumentPicker label="Attach the minutes (optional)" file={file} onChange={setFile} />
+        </div>
         <Button onClick={save} loading={busy} className="w-full">Save minutes</Button>
       </div>
     </Sheet>

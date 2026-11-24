@@ -40,7 +40,9 @@ export function AddClientSheet({ open, onClose, onDone }: Props) {
       onClose();
       onDone(res.data.id);
     } catch (err) {
-      if (statusOf(err) === 409) setExisting(errorData<{ companyId: string; isClient: boolean }>(err) ?? null);
+      // A company-name match offers the existing company; a phone / email match shows on that field instead.
+      const dup = statusOf(err) === 409 ? errorData<{ companyId: string; isClient?: boolean }>(err) : null;
+      if (dup && typeof dup.isClient === "boolean") setExisting({ companyId: dup.companyId, isClient: dup.isClient });
       const fe = fieldErrors(err);
       if (Object.keys(fe).length) setErrors(fe);
       else if (statusOf(err) !== 409) toast.error(errorMessage(err));

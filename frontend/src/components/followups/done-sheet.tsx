@@ -30,10 +30,11 @@ export function FollowUpDoneSheet({ item, onClose, onDone, onMoveStage }: Props)
   const [date, setDate] = useState(nextBusinessDayIso());
   const [note, setNote] = useState("");
   const [err, setErr] = useState<string>();
+  const [noteErr, setNoteErr] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (item) { setMode("choose"); setDate(nextBusinessDayIso()); setNote(""); setErr(undefined); }
+    if (item) { setMode("choose"); setDate(nextBusinessDayIso()); setNote(""); setErr(undefined); setNoteErr(undefined); }
   }, [item]);
 
   const name = item ? (item.projectTitle ? `${item.companyName} · ${item.projectTitle}` : item.companyName) : "";
@@ -46,6 +47,7 @@ export function FollowUpDoneSheet({ item, onClose, onDone, onMoveStage }: Props)
 
   async function saveDate() {
     if (!item) return;
+    if (!note.trim()) return setNoteErr("Say what happened");
     if (!date) return setErr("Pick the next follow-up date");
     setBusy(true);
     try {
@@ -54,7 +56,7 @@ export function FollowUpDoneSheet({ item, onClose, onDone, onMoveStage }: Props)
         await apiClient.post("/tasks", { leadId: item.leadId, dueDate: date, title: note.trim().slice(0, 200) || null });
         if (note.trim()) await apiClient.post(`/leads/${item.leadId}/notes`, { note: note.trim() });
       } else {
-        await apiClient.post(`/tasks/${item.id}/complete`, { nextFollowUp: date, outcome: note.trim() || null });
+        await apiClient.post(`/tasks/${item.id}/complete`, { nextFollowUp: date, outcome: note.trim() });
       }
       toast.success("Follow-up done");
       onClose();
@@ -104,7 +106,10 @@ export function FollowUpDoneSheet({ item, onClose, onDone, onMoveStage }: Props)
       {mode === "date" && (
         <div className="space-y-4">
           <Back onClick={() => setMode("choose")} />
-          <VoiceTextarea label="What happened? (optional)" value={note} onChange={setNote} rows={2} placeholder="Write a note" />
+          <div>
+            <VoiceTextarea label="What happened?" value={note} onChange={(v) => { setNote(v); setNoteErr(undefined); }} rows={2} placeholder="Write the outcome" />
+            {noteErr && <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">{noteErr}</p>}
+          </div>
           <DateChips label="Next follow-up" required value={date} onChange={(d) => { setDate(d); setErr(undefined); }} error={err} />
           <Button onClick={saveDate} loading={busy} className="w-full">Save</Button>
         </div>

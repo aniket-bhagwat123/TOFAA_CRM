@@ -149,6 +149,7 @@ export default function LeadsPage() {
         </div>
         <div className="flex w-full items-center gap-2 sm:w-auto">
           <SearchInput className="min-w-0 flex-1 sm:w-64 sm:flex-none xl:w-72" value={search} onChange={(v) => reset(() => setSearch(v))} placeholder="Search" />
+          <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /> Import</Button>
           {view !== "lost" && (
             <div className="flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
               {([["board", "Board view", Columns3], ["table", "Table view", Table2]] as const).map(([v, label, Icon]) => (
@@ -201,7 +202,6 @@ export default function LeadsPage() {
           Overdue
         </button>}
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          <Button variant="secondary" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /> Import</Button>
           {addButton}
         </div>
       </div>

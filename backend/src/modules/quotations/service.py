@@ -12,7 +12,8 @@ from src.core.documents import checked_document
 from src.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from src.core.money import format_inr, to_money
 from src.core.parallel import par
-from src.core.storage import DOCUMENTS, signed_document_url, signed_urls, upload_document
+from src.core import share_links
+from src.core.storage import DOCUMENTS, signed_urls, upload_document
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
 from src.core.email import send_email
@@ -369,7 +370,8 @@ def send(user: Profile, quotation_id: str, body: schemas.SendQuotation) -> dict:
 
     data, number = make_pdf(user, quotation_id)
     path = upload_document(q["lead_id"], data, "application/pdf", "pdf")
-    link = signed_document_url(path, LINK_DAYS * 86400, download_name=f"{number}.pdf")
+    # A short link on the CRM's own address (https://<crm>/s/<code>), never the storage URL.
+    link = share_links.create(path, f"{number}.pdf", days=LINK_DAYS, mime="application/pdf", kind="quotation", lead_id=q["lead_id"], user_id=user.id)
     total = format_inr(q["total"])
     company = lead["company"]["name"]
 

@@ -204,6 +204,31 @@ def on_deal_won(lead_id: str) -> None:
             notify(lead["owner_id"], f"client:{lead['company_id']}", f"{name} is now a client", "Add their gifting occasions so you call before each one.", f"/clients/{lead['company_id']}")
 
 
+def _contact_taken(phone: str | None, email: str | None, company_id: str | None = None) -> None:
+    """Stop a second contact with a phone or email already in the CRM (on any company, or this one)."""
+    pk, ek = phone_key(phone), email_key(email)
+    if not pk and not ek:
+        return
+    db = get_service_client()
+    base = "id,name,company_id,phone_key,email_key,company:companies(name)"
+    phones = [f"phone_key.eq.{pk}"] if pk else []
+    emails = [f"email_key.eq.{ek}"] if ek else []
+    try:
+        hits = db.table("contacts").select(f"{base},alt_phone_key").or_(",".join([*phones, *([f"alt_phone_key.eq.{pk}"] if pk else []), *emails])).limit(5).execute().data
+    except Exception:  # noqa: BLE001 - before migration 20260108000000 there is no alt_phone_key
+        hits = db.table("contacts").select(base).or_(",".join([*phones, *emails])).limit(5).execute().data
+    if not hits:
+        return
+    h = hits[0]
+    by_phone = bool(pk) and pk in (h.get("phone_key"), h.get("alt_phone_key"))
+    who = h.get("name") or "a contact"
+    where = "this client" if company_id and h["company_id"] == company_id else (h.get("company") or {}).get("name") or "another company"
+    raise ConflictError(
+        f"This {'phone number' if by_phone else 'email'} already belongs to {who} at {where}.",
+        {"errors": [{"field": "phone" if by_phone else "email", "message": f"Already used by {who} ({where})"}], "companyId": h["company_id"]},
+    )
+
+
 def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
     require_lead_role(user)
     db = get_service_client()
@@ -220,6 +245,7 @@ def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
         existing = db.table("companies").select("id,client_since").eq("name_key", company_key(body.company_name)).limit(1).execute().data
         if existing:
             raise ConflictError("This company is already in the CRM.", data={"companyId": existing[0]["id"], "isClient": bool(existing[0].get("client_since"))})
+        _contact_taken(body.phone, body.email)  # the same person under another company name is still a duplicate
         company_id = db.table("companies").insert(
             {"name": body.company_name, "name_key": company_key(body.company_name), "city": body.city, "created_by": user.id}
         ).execute().data[0]["id"]
@@ -340,6 +366,7 @@ def update_client(user: Profile, company_id: str, body: schemas.ClientUpdate) ->
 
 def add_contact(user: Profile, company_id: str, body: schemas.ContactCreate) -> dict:
     _client(user, company_id)
+    _contact_taken(body.phone, body.email, company_id)
     row = get_service_client().table("contacts").insert(
         {"company_id": company_id, "name": body.name.strip(), "designation": body.designation, "phone": body.phone,
          "phone_key": phone_key(body.phone), "email": body.email, "email_key": email_key(body.email)}
@@ -435,6 +462,15 @@ def create_project(user: Profile, company_id: str, body: schemas.ProjectCreate) 
     requirement = {k: v for k, v in {"occasion": body.occasion, "quantity": body.quantity, "budget": body.budget,
                                      "deliveryDate": body.delivery_date.isoformat() if body.delivery_date else None}.items() if v}
     db = get_service_client()
+    # The same project twice (a double tap, or a re-entry) is a duplicate: one open project per name per client.
+    title_key = " ".join(body.title.split()).lower()
+    open_projects = db.table("leads").select("id,project_title,stage").eq("company_id", company_id).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).execute().data
+    same = next((p for p in open_projects if " ".join((p.get("project_title") or "").split()).lower() == title_key), None)
+    if same:
+        raise ConflictError(
+            f"This client already has an open project called \"{same['project_title']}\".",
+            {"errors": [{"field": "title", "message": "An open project with this name already exists"}], "projectId": same["id"]},
+        )
     lead = db.table("leads").insert(
         {"company_id": company_id, "contact_id": contact_id, "owner_id": owner_id, "stage": "project_follow_up", "pipeline": "client",
          "project_title": body.title.strip(), "occasion": (body.occasion or "").strip() or None, "origin": body.origin,

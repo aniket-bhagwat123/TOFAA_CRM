@@ -10,7 +10,8 @@ from src.core.documents import checked_document
 from src.core.email import send_email
 from src.core.errors import AppError
 from src.core.parallel import par
-from src.core.storage import DOCUMENTS, signed_document_url, signed_urls, upload_document
+from src.core import share_links
+from src.core.storage import DOCUMENTS, signed_urls, upload_document
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
 from src.modules.auth.schemas import Profile
@@ -113,13 +114,16 @@ def save(user: Profile, lead_id: str, body: schemas.SamplesSave) -> dict:
 
 # --- send --------------------------------------------------------------------------------------------------------------
 
-def _links(items: list[dict]) -> list[tuple[str, list[tuple[str, str]]]]:
-    """(item title, [(file name, link)]) for every item that has files. Links work without signing in, for LINK_DAYS."""
+def _links(items: list[dict], lead_id: str | None = None, user_id: str | None = None) -> list[tuple[str, list[tuple[str, str]]]]:
+    """(item title, [(file name, link)]) for every item that has files. Short links on the CRM's own address
+    (https://<crm>/s/<code>), working without signing in for LINK_DAYS."""
     out = []
     for it in items:
         files = []
         for f in it.get("files") or []:
-            url = signed_document_url(f.get("path"), LINK_DAYS * 86400)
+            if not f.get("path"):
+                continue
+            url = share_links.create(f["path"], f.get("name") or "file", days=LINK_DAYS, mime=f.get("mime"), kind="sample", lead_id=lead_id, user_id=user_id)
             if url:
                 files.append((f.get("name") or "file", url))
         if files:
@@ -169,7 +173,7 @@ def send(user: Profile, lead_id: str, body: schemas.SamplesSend) -> dict:
         if _missing_table(exc):
             raise AppError(NOT_READY, status_code=503) from exc
         raise
-    links = _links(rows)
+    links = _links(rows, lead_id, user.id)
     if not links:
         raise AppError("Upload at least one sample file, then send.", {"errors": [{"field": "samples", "message": "Upload at least one sample file."}]}, 422)
     file_count = sum(len(f) for _, f in links)

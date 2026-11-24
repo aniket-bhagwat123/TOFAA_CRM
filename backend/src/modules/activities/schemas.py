@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from enum import StrEnum
 
 from pydantic import Field
@@ -20,6 +20,8 @@ class CallLog(CamelModel):
     outcome: CallOutcome
     note: str | None = Field(default=None, max_length=4000)
     next_follow_up: date | None = None
+    next_follow_up_time: time | None = None  # optional: the time the client asked to be called back
+    task_id: str | None = None  # logged from a follow-up card: that follow-up is finished with this outcome
     # Only with "Wrong number": the right number. It becomes the main phone; the old one is kept as the second number.
     new_phone: str | None = Field(default=None, max_length=20)
     new_name: str | None = Field(default=None, max_length=120)  # the right person's full name, with the new number

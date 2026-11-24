@@ -18,13 +18,15 @@ export function CompleteSheet({ task, onClose, onDone }: Props) {
   const [date, setDate] = useState(nextBusinessDayIso());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string>();
+  const [noteErr, setNoteErr] = useState<string>();
 
   async function save() {
     if (!task) return;
+    if (!note.trim()) return setNoteErr("Say what happened");
     if (!date) return setErr("Pick the next follow-up date");
     setBusy(true);
     try {
-      await apiClient.post(`/tasks/${task.id}/complete`, { nextFollowUp: date || null, outcome: note.trim() || null });
+      await apiClient.post(`/tasks/${task.id}/complete`, { nextFollowUp: date || null, outcome: note.trim() });
       toast.success("Done");
       setNote("");
       onClose();
@@ -40,7 +42,10 @@ export function CompleteSheet({ task, onClose, onDone }: Props) {
   return (
     <Sheet open={!!task} title="Complete task" subtitle={task?.name} icon={CheckCircle2} tone="emerald" onClose={onClose}>
       <div className="space-y-4">
-        <VoiceTextarea label="What happened? (optional)" value={note} onChange={setNote} rows={2} placeholder="Write a note" />
+        <div>
+          <VoiceTextarea label="What happened?" value={note} onChange={(v) => { setNote(v); setNoteErr(undefined); }} rows={2} placeholder="Write the outcome" />
+          {noteErr && <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">{noteErr}</p>}
+        </div>
         <DateChips label="Next follow-up" required value={date} onChange={(d) => { setDate(d); setErr(undefined); }} error={err} />
         <Button onClick={save} loading={busy} className="w-full">Save</Button>
       </div>

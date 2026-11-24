@@ -44,7 +44,7 @@ export const BAND_LABEL: Record<string, string> = {
 export const OUTCOME_LABEL: Record<string, string> = {
   not_reachable: "Not reachable",
   call_back_later: "Call back later",
-  future_requirement: "Future requirement",
+  future_requirement: "No requirement now",
   interested: "Interested",
   not_interested: "Not interested",
   wrong_contact: "Wrong contact",

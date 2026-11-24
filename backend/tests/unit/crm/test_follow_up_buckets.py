@@ -11,9 +11,9 @@ def test_columns_by_due_date():
     assert bucket_for(TODAY - timedelta(days=3), TODAY) == "overdue"
     assert bucket_for(TODAY, TODAY) == "today"
     assert bucket_for(TODAY + timedelta(days=1), TODAY) == "tomorrow"
-    assert bucket_for(TODAY + timedelta(days=2), TODAY) == "this_week"
-    assert bucket_for(TODAY + timedelta(days=7), TODAY) == "this_week"
-    assert bucket_for(TODAY + timedelta(days=8), TODAY) is None
+    assert bucket_for(TODAY + timedelta(days=2), TODAY) == "later_this_week"
+    assert bucket_for(TODAY + timedelta(days=7), TODAY) == "later_this_week"
+    assert bucket_for(TODAY + timedelta(days=8), TODAY) == "later"  # beyond the week: Nurture touches and so on
 
 
 def test_meeting_earlier_today_is_missed():

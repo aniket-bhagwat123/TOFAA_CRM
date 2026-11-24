@@ -11,7 +11,8 @@ log = logging.getLogger(__name__)
 DEFAULTS: dict[str, Any] = {
     "retry": {"maxAttempts": 5, "gapDays": 1},  # after maxAttempts "Not reachable" calls a lead is Cold; gapDays to the next try
     "nurtureDays": 30,                          # a "Future requirement" lead comes back after this many days
-    "stuckDays": 14,                            # an open deal with no progress for this long shows as stuck on the Dashboard
+    "stuckDays": 14,
+    "workingHours": {"start": "09:30", "end": "18:30", "days": [0, 1, 2, 3, 4]},  # follow-ups outside these move to the next working morning                            # an open deal with no progress for this long shows as stuck on the Dashboard
     "lostReasons": ["Price too high", "Chose competitor", "No budget", "No response", "Not a fit", "Postponed", "Invalid contact", "Other"],
     "sources": ["Referral", "Website", "Instagram", "LinkedIn", "Cold call", "Exhibition", "WhatsApp", "Existing client", "Other"],
 }

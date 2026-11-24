@@ -13,6 +13,7 @@ export type LeadTarget = {
   companyId?: string;
   lastCallOutcome?: string | null; // preselected in the call outcome sheet
   callAttempts?: number;
+  taskId?: string; // called from a follow-up card: the outcome finishes that follow-up
 };
 
 export type LeadAction = "call" | "whatsapp" | "meeting" | "stage" | "lost" | "reassign" | "complete";
