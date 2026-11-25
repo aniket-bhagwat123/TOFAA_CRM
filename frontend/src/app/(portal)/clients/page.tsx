@@ -1,25 +1,27 @@
 "use client";
 import { Megaphone, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AddClientSheet } from "@/components/clients/add-client-sheet";
 import { CampaignModal } from "@/components/clients/campaign-modal";
 import { ClientCard } from "@/components/clients/client-card";
+import { ClientTable } from "@/components/clients/client-table";
 import { ClientFollowUpSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
 import { Button } from "@/components/ui/button";
+import { ClearFilters, FilterLabel, FilterSelect } from "@/components/ui/filter-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { StateView } from "@/components/ui/state-view";
+import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { openWhatsApp, telHref } from "@/lib/format";
 import { isManager } from "@/lib/roles";
-import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import type { AssignableUser, ClientSummary } from "@/types/crm";
 
-const select = "h-10 w-full shrink-0 truncate rounded-xl border border-slate-300/80 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15 sm:w-auto";
+const VIEW_KEY = "clients.view"; // Board (cards) or Table, remembered in this browser
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -33,11 +35,18 @@ export default function ClientsPage() {
   const [calling, setCalling] = useState<ClientTaskTarget | null>(null);
   const [adding, setAdding] = useState(false);
   const [campaign, setCampaign] = useState(false);
+  const [layout, setLayout] = useState<"board" | "table">("board");
   const q = useDebounce(search, 300);
+
+  useEffect(() => { try { if (localStorage.getItem(VIEW_KEY) === "table") setLayout("table"); } catch { /* storage unavailable */ } }, []);
+  const chooseLayout = (v: "board" | "table") => { setLayout(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ } };
 
   const list = useApi<ClientSummary[]>("/clients", { search: q, tier, status, ownerId: owner, occasionSoon: occasions === "soon" || undefined, noOccasions: occasions === "none" || undefined });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const filtering = !!(q || tier || status || owner || occasions);
+  const activeFilters = [q, tier, status, owner, occasions].filter(Boolean).length;
+  const clearAll = () => { setSearch(""); setTier(""); setStatus(""); setOwner(""); setOccasions(""); };
+  const shown = list.data?.length;
 
   // Call dials, and the outcome form is waiting when the call ends, so every client call is recorded.
   const call = (c: ClientSummary) => {
@@ -50,32 +59,28 @@ export default function ClientsPage() {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader title={role === "kam" ? "My Accounts" : "Clients"} />
-      <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-        <SearchInput className="lg:w-60 xl:w-72 lg:min-w-0" value={search} onChange={setSearch} placeholder="Search" />
-        <select className={select} value={tier} onChange={(e) => setTier(e.target.value)} aria-label="Tier">
-          <option value="">All tiers</option>
-          {["A", "B", "C"].map((t) => <option key={t} value={t}>Tier {t}</option>)}
-        </select>
-        <select className={select} value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
-          <option value="">Active and dormant</option>
-          <option value="active">Active</option>
-          <option value="dormant">Dormant</option>
-        </select>
-        {people.data && (
-          <select className={select} value={owner} onChange={(e) => setOwner(e.target.value)} aria-label="Owner">
-            <option value="">Whole team</option>
-            {people.data.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
-          </select>
-        )}
-        <select className={cn(select, occasions === "none" && "border-amber-300 bg-amber-50 text-amber-800")} value={occasions} onChange={(e) => setOccasions(e.target.value)} aria-label="Occasions">
-          <option value="">All occasions</option>
-          <option value="soon">Occasion coming soon</option>
-          <option value="none">No occasions added</option>
-        </select>
+      {/* Row 1: search on the left; view switch, Campaign and Add client on the right */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput className="min-w-0 flex-1 sm:max-w-sm" value={search} onChange={setSearch} placeholder="Search clients" />
         <div className="ml-auto flex shrink-0 items-center gap-2">
-          {manager && <Button variant="secondary" onClick={() => setCampaign(true)}><Megaphone className="h-4 w-4" /> Campaign</Button>}
+          <ViewToggle value={layout} onChange={chooseLayout} options={BOARD_TABLE} />
+          {manager && <Button variant="secondary" onClick={() => setCampaign(true)}><Megaphone className="h-4 w-4" /><span className="hidden sm:inline">Campaign</span></Button>}
           <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add client</Button>
         </div>
+      </div>
+
+      {/* Row 2: filters (an active one turns blue), Clear, and how many clients are shown */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterLabel />
+        <FilterSelect label="Tier" all="All tiers" value={tier} onChange={setTier} options={["A", "B", "C"].map((t) => ({ value: t, label: `Tier ${t}` }))} />
+        <FilterSelect label="Status" all="Active and dormant" value={status} onChange={setStatus} options={[{ value: "active", label: "Active" }, { value: "dormant", label: "Dormant" }]} />
+        <FilterSelect label="Occasions" all="All occasions" value={occasions} onChange={setOccasions}
+          options={[{ value: "soon", label: "Occasion coming soon" }, { value: "none", label: "No occasions added" }]} />
+        {people.data && (
+          <FilterSelect label="Owner" all="Whole team" value={owner} onChange={setOwner} options={people.data.map((u) => ({ value: u.id, label: u.fullName ?? "Unnamed" }))} />
+        )}
+        <ClearFilters count={activeFilters} onClear={clearAll} />
+        {shown != null && <span className="t-meta ml-auto whitespace-nowrap">{shown} {shown === 1 ? "client" : "clients"}</span>}
       </div>
 
       <div className="min-h-0 flex-1">
@@ -89,7 +94,10 @@ export default function ClientsPage() {
             action={filtering ? undefined : <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add client</Button>}
           />
         )}
-        {list.data && list.data.length > 0 && (
+        {list.data && list.data.length > 0 && layout === "table" && (
+          <ClientTable clients={list.data} showOwner={manager} onCall={call} onWhatsApp={(c) => openWhatsApp(c.primaryContact?.phone)} />
+        )}
+        {list.data && list.data.length > 0 && layout === "board" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {list.data.map((c) => (
               <ClientCard key={c.id} client={c} showOwner={manager} onCall={() => call(c)} onWhatsApp={() => openWhatsApp(c.primaryContact?.phone)} />

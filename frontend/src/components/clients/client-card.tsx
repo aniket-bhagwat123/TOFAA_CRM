@@ -42,11 +42,7 @@ export function ClientCard({ client, showOwner, onCall, onWhatsApp }: Props) {
         </div>
 
         <div className="space-y-1.5 text-[13px]">
-          {noOccasions ? (
-            <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2 py-1.5 font-medium text-amber-800">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />No occasions: add them to get call reminders
-            </div>
-          ) : (
+          {!noOccasions && (
             <div className={cn("flex items-center gap-2", soon ? "font-medium text-indigo-700" : "text-slate-600")}>
               <CalendarHeart className="h-3.5 w-3.5 shrink-0" />
               {occ ? `${occ.name} · ${formatDate(occ.date)} (${occ.daysAway === 0 ? "today" : `in ${occ.daysAway} days`})` : "Occasion date not in the calendar yet"}
@@ -61,6 +57,12 @@ export function ClientCard({ client, showOwner, onCall, onWhatsApp }: Props) {
             </span>
           </div>
           <div className="flex items-center gap-2 text-slate-600"><FolderKanban className="h-3.5 w-3.5 shrink-0 text-slate-400" />{client.lastOrderAt ? `Last order ${formatDate(client.lastOrderAt)}` : "No order yet"}</div>
+          {/* a small reminder at the bottom, not a banner: occasions are what drive the call reminders */}
+          {noOccasions && (
+            <div className="flex items-center gap-1.5 pt-0.5 text-xs font-medium text-amber-700" title="Add their gifting occasions to get call reminders before each one">
+              <AlertTriangle className="h-3 w-3 shrink-0" />No occasions added
+            </div>
+          )}
         </div>
       </Link>
       <footer className="mt-auto flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50/60 px-4 py-3">
