@@ -12,6 +12,8 @@ const TITLES: [string, string][] = [
   ["/leads", "Leads"],
   ["/projects", "Projects"],
   ["/clients", "Clients"],
+  ["/people", "People"],
+  ["/banners", "Banners"],
   ["/activity", "Activity"],
   ["/dashboard", "Dashboard"],
   ["/quotations", "Quotations"],

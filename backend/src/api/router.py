@@ -12,6 +12,9 @@ from src.modules.orders.router import router as orders_router
 from src.modules.reports.router import router as reports_router
 from src.modules.samples.router import router as samples_router
 from src.modules.auth.router import router as auth_router
+from src.modules.banners.router import router as banners_router
+from src.modules.integrations.router import router as integrations_router
+from src.modules.people.router import router as people_router
 from src.modules.clients.router import router as clients_router
 from src.modules.deal.router import router as deal_router
 from src.modules.imports.router import router as imports_router
@@ -32,9 +35,13 @@ api_router = APIRouter()
 
 # Public / pre-context routes
 api_router.include_router(auth_router)
+# Server to server (TOFAA Gifting OS): an API key, not a signed-in person
+api_router.include_router(integrations_router)
 
 # Feature routes
 api_router.include_router(users_router)
+api_router.include_router(people_router)  # KAM and admin
+api_router.include_router(banners_router)  # KAM and admin
 api_router.include_router(leads_router)
 api_router.include_router(activities_router)
 api_router.include_router(tasks_router)

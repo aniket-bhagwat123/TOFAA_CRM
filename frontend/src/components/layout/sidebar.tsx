@@ -2,7 +2,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, type FocusEvent, type MouseEvent } from "react";
 import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types/api";
@@ -37,11 +37,21 @@ type Props = { user: Profile; collapsed: boolean; onToggle: () => void };
  * Full menu, or just icons. The round arrow sits on the menu's right border, halfway down, in both states:
  * it is always in the same place relative to the edge, so there is never a hunt for it.
  * In icon mode each item shows its name in a tooltip on hover or keyboard focus.
+ * The item list scrolls on its own when it is taller than the window (the page shell never scrolls), so every item
+ * stays reachable. The tooltip is placed against the window (fixed), so the scroll area cannot clip it.
  */
 export function Sidebar({ user, collapsed, onToggle }: Props) {
   const path = usePathname();
   const items = navFor(user.role); // Profile lives in the user menu (top right)
   const overdue = useOverdueCount(items.some((i) => i.href === FOLLOW_UPS), path);
+  const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
+  const showTip = (text: string) => (e: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>) => {
+    if (!collapsed) return;
+    const r = e.currentTarget.getBoundingClientRect();
+    setTip({ text, top: r.top + r.height / 2, left: r.right + 12 });
+  };
+  const hideTip = () => setTip(null);
+  useEffect(hideTip, [collapsed, path]);
   return (
     <aside
       className={cn(
@@ -56,14 +66,19 @@ export function Sidebar({ user, collapsed, onToggle }: Props) {
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 px-3 pt-2" aria-label="Main">
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-2" aria-label="Main" onScroll={hideTip}>
         {items.map(({ href, label, icon: Icon }) => {
           const active = path.startsWith(href);
           const badge = href === FOLLOW_UPS && overdue > 0 ? (overdue > 99 ? "99+" : String(overdue)) : null;
+          const tipText = `${label}${badge ? ` · ${badge} overdue` : ""}`;
           return (
             <Link
               key={href}
               href={href}
+              onMouseEnter={showTip(tipText)}
+              onMouseLeave={hideTip}
+              onFocus={showTip(tipText)}
+              onBlur={hideTip}
               aria-label={collapsed ? (badge ? `${label}, ${badge} overdue` : label) : undefined}
               aria-current={active ? "page" : undefined}
               className={cn(
@@ -80,19 +95,21 @@ export function Sidebar({ user, collapsed, onToggle }: Props) {
               {badge && collapsed && (
                 <span aria-hidden="true" className="absolute right-1.5 top-1 min-w-[1.1rem] rounded-full bg-red-600 px-1 py-0.5 text-center text-[10px] font-semibold leading-none text-white ring-2 ring-white">{badge}</span>
               )}
-              {collapsed && (
-                <span
-                  role="tooltip"
-                  className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white opacity-0 shadow-float transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100"
-                >
-                  {label}{badge ? ` · ${badge} overdue` : ""}
-                  <span className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 bg-slate-900" aria-hidden="true" />
-                </span>
-              )}
             </Link>
           );
         })}
       </nav>
+
+      {collapsed && tip && (
+        <span
+          role="tooltip"
+          style={{ top: tip.top, left: tip.left }}
+          className="pointer-events-none fixed z-50 -translate-y-1/2 whitespace-nowrap rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-float"
+        >
+          {tip.text}
+          <span className="absolute -left-1 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 bg-slate-900" aria-hidden="true" />
+        </span>
+      )}
 
       {/* The toggle sits on the right border. Its vertical position is a plain `top` (33px centre minus half its height), never a translate: the press effect (.pressable) replaces `transform`, which used to drop the button by half its height on mouse-down and sometimes lose the click. */}
       <button

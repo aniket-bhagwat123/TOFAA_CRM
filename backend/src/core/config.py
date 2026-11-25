@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     ERP_WEBHOOK_SECRET: str = ""  # the ERP signs payment callbacks with this; empty = reject them all
     PAYMENT_FALLBACK_ENABLED: bool = True  # Finance "Confirm payment" button; turn off once the ERP link is live
 
+    # Server-to-server key that TOFAA Gifting OS sends (header X-API-Key) to read the shared Dashboard banners.
+    # At least 32 characters; empty or shorter = the integration endpoints refuse every call.
+    GIFTING_OS_API_KEY: str = ""
+
     # Client management
     CLIENT_TIER_A: int = 1_000_000  # rupees won in the last 12 months for tier A
     CLIENT_TIER_B: int = 200_000  # and for tier B; below is C
