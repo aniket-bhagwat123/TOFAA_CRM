@@ -1,9 +1,9 @@
 "use client";
-import { Archive, ArchiveRestore, Pencil, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, Cake, Heart, Pencil, Trash2 } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip } from "@/components/ui/tooltip";
-import { formatDate } from "@/lib/format";
+import { formatFullDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Person } from "@/types/people";
 import { mobileText, relationshipOf } from "./labels";
@@ -22,6 +22,32 @@ type Props = {
   onArchive: (p: Person) => void;
   onDelete: (p: Person) => void;
 };
+
+type Occasion = NonNullable<Person["nextOccasion"]>;
+
+function daysText(days: number): string {
+  return days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
+}
+
+/** The next birthday or anniversary: a round icon, the occasion in bold and its date below ("11 Dec 2026"). */
+function OccasionCell({ occasion }: { occasion: Occasion }) {
+  const birthday = occasion.kind === "BIRTHDAY";
+  const Icon = birthday ? Cake : Heart;
+  return (
+    <div className="flex items-center gap-3" title={daysText(occasion.daysAway)}>
+      <span className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-full", birthday ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-600")} aria-hidden="true">
+        <Icon className="h-[1.15rem] w-[1.15rem]" />
+      </span>
+      <span className="min-w-0 leading-tight">
+        <span className="block text-sm font-semibold text-slate-900">{occasion.label}</span>
+        <span className="block text-[13px] tabular-nums text-slate-500">
+          {formatFullDate(occasion.date)}
+          {occasion.daysAway <= 7 && <span className="ml-1.5 font-medium text-brand">· {daysText(occasion.daysAway)}</span>}
+        </span>
+      </span>
+    </div>
+  );
+}
 
 /** The People list: tick to select, a click on the name opens the profile. */
 export function PeopleTable({ people, showAccount, selected, onToggle, onToggleAll, sort, onSort, onOpen, onEdit, onArchive, onDelete }: Props) {
@@ -79,12 +105,8 @@ export function PeopleTable({ people, showAccount, selected, onToggle, onToggleA
                   {p.email && <div className="max-w-[12rem] truncate text-slate-400">{p.email}</div>}
                 </TableCell>
                 <TableCell className="text-slate-600">{p.city || <span className="text-slate-300">—</span>}</TableCell>
-                <TableCell className="whitespace-nowrap text-xs">
-                  {occ ? (
-                    <span className={occ.daysAway <= 30 ? "font-medium text-indigo-700" : "text-slate-600"}>
-                      {occ.label} · {occ.daysAway === 0 ? "today" : occ.daysAway === 1 ? "tomorrow" : `${formatDate(occ.date)} (${occ.daysAway} days)`}
-                    </span>
-                  ) : <span className="text-slate-300">—</span>}
+                <TableCell className="whitespace-nowrap">
+                  {occ ? <OccasionCell occasion={occ} /> : <span className="text-slate-300">—</span>}
                 </TableCell>
                 <TableCell>
                   <div className="flex w-24 items-center gap-2" title={`Profile ${pct}% complete`}>

@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # Server-to-server key that TOFAA Gifting OS sends (header X-API-Key) to read the shared Dashboard banners.
     # At least 32 characters; empty or shorter = the integration endpoints refuse every call.
     GIFTING_OS_API_KEY: str = ""
+    # People are mastered here and mirrored in Gifting OS. After a People change the CRM tells Gifting OS at this base
+    # address (e.g. http://127.0.0.1:8001; https in production). Empty = no notice (Gifting OS then catches up itself).
+    GIFTING_OS_API_URL: str = ""
+    # Email of the KAM who owns client accounts created for new Gifting OS clients (empty = no owner: admins only).
+    GIFTING_OS_ACCOUNT_OWNER: str = ""
 
     # Client management
     CLIENT_TIER_A: int = 1_000_000  # rupees won in the last 12 months for tier A

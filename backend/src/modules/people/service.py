@@ -7,6 +7,7 @@ completeness score and an append-only change history. Saving an old copy is refu
 """
 import logging
 import re
+from typing import Literal
 
 from src.core import cache
 from src.core.dates import now_ist, today_ist
@@ -31,14 +32,33 @@ INTL = re.compile(r"^\+?[1-9][0-9]{7,14}$")
 
 # --- access -----------------------------------------------------------------------------------------------------------
 
+class ExternalActor(Profile):
+    """Someone signed in to TOFAA Gifting OS, working on one client's people through the integration API.
+
+    Not a CRM user: rows they write have no CRM user id (created_by / updated_by / actor_id stay empty); the history
+    keeps their name and Gifting OS role instead. They only ever reach the one client account linked to their tenant."""
+
+    company_id: str
+    added_by: Literal["CLIENT", "TOFAA"] = "TOFAA"
+    actor_role: str | None = None
+
+
+def uid(user: Profile) -> str | None:
+    """The CRM user id to store as author, or None for someone from Gifting OS."""
+    return None if isinstance(user, ExternalActor) else user.id
+
+
 def require_role(user: Profile) -> None:
     if user.role not in ROLES:
         raise ForbiddenError("People is for KAM and admin.")
 
 
 def company_scope(user: Profile) -> list[str] | None:
-    """Client accounts the user may work with: None means all (admin); a KAM, the accounts they own."""
+    """Client accounts the user may work with: None means all (admin); a KAM, the accounts they own; someone from
+    Gifting OS, only their own client's account."""
     require_role(user)
+    if isinstance(user, ExternalActor):
+        return [user.company_id]
     if user.role == Role.ADMIN:
         return None
 
@@ -93,7 +113,9 @@ def record(user: Profile, recipient_ids: list[str], action: str, changes: list[t
     """Append to the history. Never blocks the change itself."""
     rows = []
     for rid in recipient_ids:
-        base = {"recipient_id": rid, "actor_id": user.id, "actor_name": user.full_name, "action": action, "source": source}
+        base = {"recipient_id": rid, "actor_id": uid(user), "actor_name": user.full_name, "action": action, "source": source}
+        if isinstance(user, ExternalActor):
+            base["actor_role"] = user.actor_role
         if changes:
             rows += [{**base, "field": f, "old_value": _json(o), "new_value": _json(n)} for f, o, n in changes]
         else:
@@ -317,7 +339,9 @@ def create(user: Profile, body: schemas.RecipientCreate, source: str = "MANUAL")
         dups = find_duplicates(user, body.company_id, body.name, data.get("mobile_number"), data.get("email"))
         if dups:
             raise ConflictError("This person may already be in this client's people.", data={"duplicates": dups})
-    row = {**data, "company_id": body.company_id, "source": source, "created_by": user.id, "updated_by": user.id}
+    row = {**data, "company_id": body.company_id, "source": source, "created_by": uid(user), "updated_by": uid(user)}
+    if isinstance(user, ExternalActor):
+        row["added_by"] = user.added_by
     try:
         person = _db(lambda: get_service_client().table("recipients").insert(row).execute().data[0])
     except AppError:
@@ -351,7 +375,7 @@ def update(user: Profile, recipient_id: str, body: schemas.RecipientUpdate) -> d
         clash = [d for d in find_duplicates(user, old["company_id"], None, data["mobile_number"], None, exclude_id=recipient_id) if "SAME_MOBILE" in d["reasons"]]
         if clash:
             raise ConflictError(f"{clash[0]['name']} already has this mobile number.", data={"errors": [{"field": "mobileNumber", "message": "Already used by another person"}]})
-    patch = {**data, "version": old["version"] + 1, "updated_by": user.id, "updated_at": now_ist().isoformat()}
+    patch = {**data, "version": old["version"] + 1, "updated_by": uid(user), "updated_at": now_ist().isoformat()}
     res = _db(lambda: get_service_client().table("recipients").update(patch).eq("id", recipient_id).eq("version", body.version).execute().data)
     if not res:  # a save landed between the read and this write
         latest = person_row(user, recipient_id)
@@ -366,7 +390,7 @@ def update(user: Profile, recipient_id: str, body: schemas.RecipientUpdate) -> d
 def delete(user: Profile, recipient_id: str) -> None:
     """Soft delete: hidden everywhere, kept in the database, can be restored."""
     person_row(user, recipient_id)
-    get_service_client().table("recipients").update({"deleted_at": now_ist().isoformat(), "updated_by": user.id}).eq("id", recipient_id).execute()
+    get_service_client().table("recipients").update({"deleted_at": now_ist().isoformat(), "updated_by": uid(user)}).eq("id", recipient_id).execute()
     record(user, [recipient_id], "DELETE")
 
 
@@ -379,7 +403,7 @@ def restore(user: Profile, recipient_id: str) -> dict:
             .is_("deleted_at", "null").limit(1).execute().data
         if clash:
             raise ConflictError(f"Can't restore: {clash[0]['name']} now has the same mobile number.")
-    get_service_client().table("recipients").update({"deleted_at": None, "updated_by": user.id}).eq("id", recipient_id).execute()
+    get_service_client().table("recipients").update({"deleted_at": None, "updated_by": uid(user)}).eq("id", recipient_id).execute()
     record(user, [recipient_id], "RESTORE")
     return get(user, recipient_id)
 
@@ -400,7 +424,7 @@ def bulk_delete(user: Profile, ids: list[str]) -> dict:
     ok_ids = _owned_ids(user, ids)
     now = now_ist().isoformat()
     for i in range(0, len(ok_ids), CHUNK):
-        get_service_client().table("recipients").update({"deleted_at": now, "updated_by": user.id}).in_("id", ok_ids[i : i + CHUNK]).execute()
+        get_service_client().table("recipients").update({"deleted_at": now, "updated_by": uid(user)}).in_("id", ok_ids[i : i + CHUNK]).execute()
     record(user, ok_ids, "DELETE")
     return {"affected": len(ok_ids)}
 
@@ -412,7 +436,7 @@ def bulk_status(user: Profile, ids: list[str], status: str) -> dict:
         rows = get_service_client().table("recipients").select("id,company_id,status,version").in_("id", ids[i : i + CHUNK]).is_("deleted_at", "null").execute().data
         todo = [r for r in rows if (scope is None or r["company_id"] in scope) and r["status"] != status]
         for r in todo:  # each one's own version goes up, so open editors see the change
-            get_service_client().table("recipients").update({"status": status, "version": r["version"] + 1, "updated_by": user.id}).eq("id", r["id"]).execute()
+            get_service_client().table("recipients").update({"status": status, "version": r["version"] + 1, "updated_by": uid(user)}).eq("id", r["id"]).execute()
         changed += [r["id"] for r in todo]
     record(user, changed, "ARCHIVE" if status == "ARCHIVED" else "RESTORE")
     return {"affected": len(changed)}
@@ -425,7 +449,7 @@ def set_photo(user: Profile, recipient_id: str, data: bytes) -> dict:
     mime, ext = checked_upload(data)
     path = upload_image(CLIENT_IMAGES, f"people/{row['company_id']}", data, mime, ext)
     try:
-        get_service_client().table("recipients").update({"photo_path": path, "updated_by": user.id}).eq("id", recipient_id).execute()
+        get_service_client().table("recipients").update({"photo_path": path, "updated_by": uid(user)}).eq("id", recipient_id).execute()
     except Exception:
         delete_image(CLIENT_IMAGES, path)
         raise
@@ -435,7 +459,7 @@ def set_photo(user: Profile, recipient_id: str, data: bytes) -> dict:
 
 def remove_photo(user: Profile, recipient_id: str) -> dict:
     row = person_row(user, recipient_id)
-    get_service_client().table("recipients").update({"photo_path": None, "updated_by": user.id}).eq("id", recipient_id).execute()
+    get_service_client().table("recipients").update({"photo_path": None, "updated_by": uid(user)}).eq("id", recipient_id).execute()
     delete_image(CLIENT_IMAGES, row.get("photo_path"))
     return get(user, recipient_id)
 
@@ -499,7 +523,7 @@ def preferences(user: Profile, recipient_id: str) -> dict:
 
 def save_preferences(user: Profile, recipient_id: str, body: schemas.PreferencesIn) -> dict:
     person_row(user, recipient_id)
-    data = {**body.model_dump(mode="json"), "recipient_id": recipient_id, "updated_by": user.id, "updated_at": now_ist().isoformat()}
+    data = {**body.model_dump(mode="json"), "recipient_id": recipient_id, "updated_by": uid(user), "updated_at": now_ist().isoformat()}
     row = get_service_client().table("recipient_preferences").upsert(data, on_conflict="recipient_id").execute().data[0]
     record(user, [recipient_id], "EDIT", [("preferences", None, "updated")])
     return row
@@ -525,7 +549,7 @@ def save_links(user: Profile, recipient_id: str, body: schemas.LinksIn) -> list[
     db.table("recipient_relationships").delete().eq("recipient_id", recipient_id).execute()
     if body.items:
         db.table("recipient_relationships").insert([{"recipient_id": recipient_id, "related_recipient_id": i.related_recipient_id,
-                                                     "relationship_type": i.relationship_type, "created_by": user.id} for i in body.items]).execute()
+                                                     "relationship_type": i.relationship_type, "created_by": uid(user)} for i in body.items]).execute()
     record(user, [recipient_id], "EDIT", [("relationships", None, f"{len(body.items)} linked")])
     return links(user, recipient_id)
 

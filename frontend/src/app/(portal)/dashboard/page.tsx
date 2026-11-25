@@ -7,7 +7,6 @@ import { CompanyDashboard, type CompanyData } from "@/components/dashboard/compa
 import { ExecutiveDashboard, type ExecutiveData } from "@/components/dashboard/executive-dashboard";
 import { FinanceDashboard, type FinanceData } from "@/components/dashboard/finance-dashboard";
 import { KamDashboard, type KamData } from "@/components/dashboard/kam-dashboard";
-import { BannerCarousel } from "@/components/banners/banner-carousel";
 import { TodayPanel } from "@/components/dashboard/today-panel";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
@@ -23,7 +22,7 @@ const INTRO: Record<string, string> = {
   sales_manager: "Pipeline, target and what needs attention across the company.",
   admin: "",
   finance: "Payments waiting, received this month, and the ERP connection.",
-  kam: "Your accounts: revenue, occasions coming up, orders and follow-ups.",
+  kam: "",
 };
 
 /** Every role has its own dashboard, built only from what that role's modules show (see backend dashboard.service). */
@@ -49,7 +48,6 @@ export default function DashboardPage() {
           ) : undefined
         }
       />
-      {(role === "admin" || role === "kam") && <div className="mb-5"><BannerCarousel /></div>}
       {data.loading && !d && <div className="flex justify-center py-12"><Spinner /></div>}
       {data.error && !d && <StateView kind="error" message={data.error} onRetry={() => void data.reload()} />}
       {d && (role === "admin" || role === "sales_manager") && <CompanyDashboard d={d as CompanyData} admin={role === "admin"} />}

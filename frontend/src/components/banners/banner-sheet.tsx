@@ -5,17 +5,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { InputField } from "@/components/ui/input-field";
-import { SelectField } from "@/components/ui/select-field";
 import { Sheet } from "@/components/ui/sheet";
 import { fieldErrors } from "@/lib/api-errors";
 import { apiClient, errorMessage } from "@/services/api-client";
 import type { Banner } from "@/types/people";
 
-const RATIO = 1000 / 90;
-const TOLERANCE = 0.02;
-const MIN_WIDTH = 500;
+/** Any wide strip, at any size: width 4 to 12 times the height (1000 x 90 is ideal). The server checks the same rule. */
+const MIN_RATIO = 4;
+const MAX_RATIO = 12;
 const MAX_BYTES = 5 * 1024 * 1024;
-export const AUDIENCE_LABEL: Record<Banner["audience"], string> = { ALL: "Everyone (KAM and admin)", KAM: "KAM only", ADMIN: "Admin only" };
 
 /** Checked here first so a wrong picture is refused at once (the server checks again). */
 async function pictureProblem(file: File): Promise<string | null> {
@@ -30,8 +28,10 @@ async function pictureProblem(file: File): Promise<string | null> {
       i.src = url;
     });
     const { naturalWidth: w, naturalHeight: h } = img;
-    if (!h || Math.abs(w / h - RATIO) / RATIO > TOLERANCE) return `The picture is ${w} x ${h}. A banner must have the 1000 x 90 shape (for example 1000 x 90 or 2000 x 180).`;
-    if (w < MIN_WIDTH) return `The picture is ${w} px wide. Use one at least ${MIN_WIDTH} px wide so it stays sharp.`;
+    const ratio = h ? w / h : 0;
+    if (ratio < MIN_RATIO || ratio > MAX_RATIO) {
+      return `The picture is ${w} x ${h} (about ${ratio.toFixed(1)} : 1). A banner must be a wide strip, from 4 : 1 to 12 : 1 (for example 2000 x 300 or 1000 x 90).`;
+    }
     return null;
   } catch {
     return "That picture could not be read. Try another file.";
@@ -42,12 +42,11 @@ async function pictureProblem(file: File): Promise<string | null> {
 
 type Props = { open: boolean; banner: Banner | null; onClose: () => void; onSaved: () => void };
 
-/** Add or edit a banner: picture, title (alt text), who sees it, order, on/off, and an optional show-from / until window. */
+/** Add or edit a banner for the Gifting OS dashboard: picture, title (alt text), order, on/off, and an optional show-from / until window. */
 export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [title, setTitle] = useState("");
-  const [audience, setAudience] = useState<Banner["audience"]>("ALL");
   const [order, setOrder] = useState("0");
   const [active, setActive] = useState(true);
   const [from, setFrom] = useState("");
@@ -58,7 +57,7 @@ export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
   useEffect(() => {
     if (!open) return;
     setFile(null); setPreview(null); setErrors({});
-    setTitle(banner?.title ?? ""); setAudience(banner?.audience ?? "ALL"); setOrder(String(banner?.sortOrder ?? 0));
+    setTitle(banner?.title ?? ""); setOrder(String(banner?.sortOrder ?? 0));
     setActive(banner?.isActive ?? true); setFrom(banner?.startsOn ?? ""); setUntil(banner?.endsOn ?? "");
   }, [open, banner]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
@@ -84,7 +83,6 @@ export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
       if (!banner) {
         const form = new FormData();
         form.append("file", file!);
-        form.append("audience", audience);
         form.append("sortOrder", String(n));
         form.append("isActive", String(active));
         if (title.trim()) form.append("title", title.trim());
@@ -98,7 +96,7 @@ export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
           form.append("file", file);
           await apiClient.put(`/admin/banners/${banner.id}/image`, form);
         }
-        await apiClient.patch(`/admin/banners/${banner.id}`, { title: title.trim() || null, audience, sortOrder: n, isActive: active, startsOn: from || null, endsOn: until || null });
+        await apiClient.patch(`/admin/banners/${banner.id}`, { title: title.trim() || null, sortOrder: n, isActive: active, startsOn: from || null, endsOn: until || null });
         toast.success("Banner saved");
       }
       onClose();
@@ -114,7 +112,7 @@ export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
 
   const shown = preview ?? banner?.imageUrl ?? null;
   return (
-    <Sheet open={open} title={banner ? "Edit banner" : "Add banner"} subtitle="Shown at the top of the Dashboard" icon={ImagePlus} tone="violet" onClose={onClose} width="lg">
+    <Sheet open={open} title={banner ? "Edit banner" : "Add banner"} subtitle="Shown at the top of the Gifting OS dashboard" icon={ImagePlus} tone="violet" onClose={onClose} width="lg">
       <div className="space-y-4">
         <div className="space-y-1.5">
           <span className="block text-sm font-medium text-slate-700">Banner picture{!banner && <span className="ml-0.5 font-semibold text-red-600" aria-hidden="true">*</span>}</span>
@@ -126,13 +124,11 @@ export function BannerSheet({ open, banner, onClose, onSaved }: Props) {
             <ImagePlus className="h-4 w-4" />{shown ? "Choose a different picture" : "Choose a picture"}
             <input type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" onChange={(e) => void pick(e.target.files?.[0] ?? null)} />
           </label>
-          <p className="text-xs text-slate-500">PNG, JPEG or WebP, up to 5 MB. The 1000 × 90 shape (for example 2000 × 180), at least 500 pixels wide.{banner ? " Leave it to keep the current picture." : ""}</p>
+          <p className="text-xs text-slate-500">PNG, JPEG or WebP, up to 5 MB. Any wide strip, from 4 : 1 to 12 : 1 at any size (1000 × 90 is ideal; 2000 × 300 also works).{banner ? " Leave it to keep the current picture." : ""}</p>
           {errors.file && <p role="alert" className="text-xs font-medium text-red-600">{errors.file}</p>}
         </div>
         <InputField label="Title (optional)" placeholder="Describes the picture for screen readers" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <SelectField label="Who sees it" required value={audience} onChange={(e) => setAudience(e.target.value as Banner["audience"])}
-            options={(Object.keys(AUDIENCE_LABEL) as Banner["audience"][]).map((v) => ({ value: v, label: AUDIENCE_LABEL[v] }))} />
           <InputField label="Order (0 shows first)" type="number" integer min={0} max={9999} value={order} onChange={(e) => { setOrder(e.target.value); setErrors((x) => ({ ...x, sortOrder: "" })); }} error={errors.sortOrder} />
           <DatePicker label="Show from (optional)" value={from} onChange={(d) => { setFrom(d); setErrors((x) => ({ ...x, endsOn: "" })); }} max={until || undefined} />
           <DatePicker label="Show until (optional)" value={until} onChange={(d) => { setUntil(d); setErrors((x) => ({ ...x, endsOn: "" })); }} min={from || undefined} error={errors.endsOn} />

@@ -43,9 +43,9 @@ def test_key_must_be_configured_long_enough_and_match():
     assert not key_matches(KEY.upper(), KEY)
 
 
-def test_shared_list_has_only_audience_all_and_only_display_fields(rows):
+def test_shared_list_has_every_live_banner_and_only_display_fields(rows):
     shared = banners.shared_live()
-    assert [b["id"] for b in shared] == ["1"]  # KAM / ADMIN banners never leave the CRM; one without a link is skipped
+    assert [b["id"] for b in shared] == ["1", "2", "3"]  # banners are only for Gifting OS now; one without a link is skipped
     assert shared[0] == {"id": "1", "title": "Diwali", "sort_order": 0, "image_url": "https://x.supabase.co/a?token=t"}
 
 
@@ -64,4 +64,4 @@ def test_endpoint_answers_with_the_right_key(rows, monkeypatch):
     res = TestClient(app).get(URL, headers={"X-API-Key": KEY})
     assert res.status_code == 200
     assert res.headers["cache-control"] == "no-store"
-    assert res.json()["data"] == [{"id": "1", "title": "Diwali", "sortOrder": 0, "imageUrl": "https://x.supabase.co/a?token=t"}]
+    assert res.json()["data"][0] == {"id": "1", "title": "Diwali", "sortOrder": 0, "imageUrl": "https://x.supabase.co/a?token=t"}

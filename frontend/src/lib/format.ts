@@ -78,6 +78,13 @@ export function formatDate(iso?: string | null): string {
   return new Intl.DateTimeFormat("en-IN", { timeZone: IST, day: "numeric", month: "short" }).format(d);
 }
 
+/** "11 Dec 2026": day, short month and year (India time). */
+export function formatFullDate(iso?: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso.length === 10 ? `${iso}T12:00:00+05:30` : iso);
+  return new Intl.DateTimeFormat("en-GB", { timeZone: IST, day: "numeric", month: "short", year: "numeric" }).format(d);
+}
+
 export function formatDateTime(iso: string): string {
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: IST, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",

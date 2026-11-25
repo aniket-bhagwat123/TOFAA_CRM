@@ -16,8 +16,8 @@ export function FilterLabel() {
 }
 
 /** A dropdown filter: "All …" when unused; blue while it is filtering, so applied filters are easy to spot. */
-export function FilterSelect({ label, value, onChange, all, options }: {
-  label: string; value: string; onChange: (v: string) => void; all: string; options: { value: string; label: string }[];
+export function FilterSelect({ label, value, onChange, all, options, className }: {
+  label: string; value: string; onChange: (v: string) => void; all: string; options: { value: string; label: string }[]; className?: string;
 }) {
   return (
     <select
@@ -25,8 +25,9 @@ export function FilterSelect({ label, value, onChange, all, options }: {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-9 w-[calc(50%-0.25rem)] cursor-pointer rounded-full border pl-3.5 pr-8 text-sm font-medium outline-none focus:ring-4 focus:ring-brand/15 sm:w-auto",
+        "h-9 w-[calc(50%-0.25rem)] cursor-pointer truncate rounded-full border pl-3.5 pr-8 text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-brand/25 sm:w-auto",
         value ? "border-brand bg-brand-soft text-brand" : "border-slate-300/80 bg-white text-slate-700 hover:border-slate-400",
+        className,
       )}
     >
       <option value="">{all}</option>

@@ -17,6 +17,10 @@ services:
         sync: false
       - key: GIFTING_OS_API_KEY
         sync: false
+      - key: GIFTING_OS_API_URL
+        sync: false
+      - key: GIFTING_OS_ACCOUNT_OWNER
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: RESEND_FROM_EMAIL

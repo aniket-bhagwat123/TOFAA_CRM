@@ -1,6 +1,7 @@
-"""Dashboard banners: pictures shaped 1000 x 90 shown as a rotating strip at the top of the Dashboard.
+"""Dashboard banners for TOFAA Gifting OS: wide pictures shown as a rotating strip at the top of its dashboard.
 
-KAM and admin only: both manage banners, and the strip shows on their Dashboards. A banner can be scheduled
+Managed here by KAM and admin; shown only in Gifting OS (never on the CRM dashboard), which reads every live banner
+through the integration API. A banner can be scheduled
 (show from / until), switched off, ordered, and aimed at everyone (KAM + admin), only KAM, or only admin.
 Pictures live in the private "banners" bucket; the API hands out signed links.
 """
@@ -24,9 +25,9 @@ COLUMNS = "id,audience,title,image_path,sort_order,is_active,starts_on,ends_on,c
 ROLES = (Role.ADMIN, Role.KAM)
 MAX_LIVE = 50
 MAX_BYTES = 5 * 1024 * 1024
-RATIO = (1000, 90)      # the banner shape
-RATIO_TOLERANCE = 0.02  # within 2%
-MIN_WIDTH = 500
+# Any wide strip is accepted, at any size: from 4 : 1 (e.g. 2000 x 500) to 12 : 1 (e.g. 1200 x 100). 1000 x 90 is ideal.
+MIN_RATIO = 4.0
+MAX_RATIO = 12.0
 LIVE_TTL = 60
 
 
@@ -54,8 +55,8 @@ def audience_allows(audience: str, role: Role) -> bool:
 
 
 def check_picture(data: bytes) -> tuple[str, str]:
-    """A banner picture: PNG, JPEG or WebP (by its own bytes), up to 5 MB, the 1000 x 90 shape within 2%, 500 px wide or
-    more. Returns (mime, extension) or raises a message the person can act on."""
+    """A banner picture: PNG, JPEG or WebP (by its own bytes), up to 5 MB, and a wide strip: width between 4 and 12 times
+    the height. Only the shape counts, never the pixel size. Returns (mime, extension) or a message the person can act on."""
     if not data:
         raise AppError("Choose a banner picture.", status_code=422)
     if len(data) > MAX_BYTES:
@@ -69,14 +70,13 @@ def check_picture(data: bytes) -> tuple[str, str]:
         width, height = Image.open(BytesIO(data)).size
     except Exception as exc:  # noqa: BLE001
         raise AppError("That picture could not be read. Try another file.", status_code=422) from exc
-    want = RATIO[0] / RATIO[1]
-    if not height or abs(width / height - want) / want > RATIO_TOLERANCE:
+    ratio = width / height if height else 0
+    if not MIN_RATIO <= ratio <= MAX_RATIO:
         raise AppError(
-            f"The picture is {width} x {height}. A banner must have the 1000 x 90 shape (for example 1000 x 90 or 2000 x 180).",
+            f"The picture is {width} x {height} (about {ratio:.1f} : 1). A banner must be a wide strip, from 4 : 1 to 12 : 1"
+            " (for example 2000 x 300 or 1000 x 90).",
             status_code=422,
         )
-    if width < MIN_WIDTH:
-        raise AppError(f"The picture is {width} px wide. Use one at least {MIN_WIDTH} px wide so it stays sharp.", status_code=422)
     return kind
 
 
@@ -122,11 +122,11 @@ SHARED_FIELDS = ("id", "title", "sort_order", "image_url")
 
 
 def shared_live() -> list[dict]:
-    """The live banners aimed at everyone (audience ALL), for TOFAA Gifting OS. Only what a dashboard needs to show
-    them: no audience, schedule, author or storage path. Picture links are signed and expire after an hour."""
+    """Every live banner, for the TOFAA Gifting OS dashboard (banners are shown only there). Only what a dashboard needs to
+    show them: no schedule, author or storage path. Picture links are signed and expire after an hour."""
 
     def load() -> list[dict]:
-        rows = _with_urls([r for r in _live_rows() if r["audience"] == "ALL"])
+        rows = _with_urls(_live_rows())
         return [{k: r.get(k) for k in SHARED_FIELDS} for r in rows if r.get("image_url")]
 
     return cache.memo("banners-shared", "gifting-os", None, LIVE_TTL, load)

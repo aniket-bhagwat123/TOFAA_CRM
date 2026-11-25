@@ -1,5 +1,5 @@
 "use client";
-import { Archive, ArchiveRestore, Download, FileUp, FolderPlus, Plus, Trash2, Users, X } from "lucide-react";
+import { Archive, ArchiveRestore, Building2, CalendarClock, Download, FileUp, FolderPlus, Heart, MapPin, Plus, Trash2, Upload, Users, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -12,8 +12,8 @@ import { PersonPanel } from "@/components/people/person-panel";
 import { PersonSheet } from "@/components/people/person-sheet";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
-import { ClearFilters, FilterLabel, FilterSelect } from "@/components/ui/filter-bar";
-import { PageHeader } from "@/components/ui/page-header";
+import { FilterMenu } from "@/components/ui/filter-menu";
+import { PAGE_SIZES, Pagination } from "@/components/ui/pagination";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { StateView } from "@/components/ui/state-view";
@@ -27,8 +27,7 @@ import type { ClientSummary } from "@/types/crm";
 import type { PeopleGroup, PeopleList, PeopleSummary, Person } from "@/types/people";
 
 type SortKey = "name" | "city" | "nextOccasion" | "created";
-const LIMIT = 25;
-const STATUSES = [{ value: "ARCHIVED", label: "Archived" }, { value: "ALL", label: "Active + archived" }];
+const PAGE_SIZE_KEY = "people.pageSize";
 
 /** People (KAM and admin): the people at each client who receive gifts, their occasions, addresses and groups. */
 export default function PeoplePage() {
@@ -47,7 +46,14 @@ export default function PeoplePage() {
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "created", desc: true });
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The chosen rows-per-page is remembered on this device.
+  useEffect(() => { try { const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY)); if (PAGE_SIZES.includes(saved)) setPageSize(saved); } catch { /* default is fine */ } }, []);
+  const changePageSize = (size: number) => {
+    setPageSize(size); setPage(1);
+    try { window.localStorage.setItem(PAGE_SIZE_KEY, String(size)); } catch { /* not remembered, still applied */ }
+  };
 
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<Person | null>(null);
@@ -61,7 +67,7 @@ export default function PeoplePage() {
     companyId: companyId || undefined, search: q || undefined, relationship: relationship || undefined, city: city || undefined,
     groupId: groupId || undefined, upcomingDays: upcoming || undefined, status: status || "ACTIVE",
   };
-  const list = useApi<PeopleList>(allowed ? "/people" : null, { ...filters, page, limit: LIMIT, sort: sort.key, order: sort.desc ? "desc" : "asc" });
+  const list = useApi<PeopleList>(allowed ? "/people" : null, { ...filters, page, limit: pageSize, sort: sort.key, order: sort.desc ? "desc" : "asc" });
   const summary = useApi<PeopleSummary>(allowed ? "/people/summary" : null, { companyId: companyId || undefined });
   const clients = useApi<ClientSummary[]>(allowed ? "/clients" : null);
   const groups = useApi<PeopleGroup[]>(allowed ? "/people-groups" : null, { companyId: companyId || undefined });
@@ -77,7 +83,6 @@ export default function PeoplePage() {
   const reload = () => { void list.reload(); void summary.reload(); void groups.reload(); };
   const clear = () => { setCompanyId(""); setRelationship(""); setCity(""); setGroupId(""); setUpcoming(""); setStatus(""); };
   const items = list.data?.items ?? [];
-  const pages = list.data ? Math.max(1, Math.ceil(list.data.total / LIMIT)) : 1;
   const picked = items.filter((p) => selected.has(p.id));
   const pickedIds = [...selected];
   // Groups hold people of one client, so "Add to group" needs the selection to share an account.
@@ -117,47 +122,68 @@ export default function PeoplePage() {
 
   return (
     <div className="space-y-4">
-      <div role="tablist" aria-label="People or groups" className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
-        {([["people", "People", summary.data?.active], ["groups", "Groups", groups.data?.length]] as const).map(([key, label, n]) => (
-          <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
-            className={cn("pressable flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium", tab === key ? "bg-brand-soft text-brand" : "text-slate-600 hover:bg-slate-50")}>
-            {key === "people" ? <Users className="h-4 w-4" /> : <FolderPlus className="h-4 w-4" />}{label}
-            {n != null && <span className="rounded-full bg-white/80 px-1.5 text-xs tabular-nums text-slate-500">{n}</span>}
-          </button>
-        ))}
+      {/* Row 1: People / Groups on the left; quick filters and actions on the right */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+        <div role="tablist" aria-label="People or groups" className="inline-flex shrink-0 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-card">
+          {([["people", "People", summary.data?.active], ["groups", "Groups", groups.data?.length]] as const).map(([key, label, n]) => (
+            <button key={key} type="button" role="tab" aria-selected={tab === key} onClick={() => setTab(key)}
+              className={cn("pressable flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors", tab === key ? "bg-brand text-white shadow-sm" : "text-slate-600 hover:bg-slate-50")}>
+              {key === "people" ? <Users className="h-4 w-4" /> : <FolderPlus className="h-4 w-4" />}
+              {label}{n != null && <span className="tabular-nums">({n})</span>}
+            </button>
+          ))}
+        </div>
+        {tab === "people" && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <FilterMenu icon={<Heart className="h-4 w-4" />} label="Relationship" value={relationship} onChange={setRelationship}
+              options={[{ value: "", label: "Relationship" }, ...RELATIONSHIPS.map((r) => ({ value: r.value, label: r.label }))]} />
+            <FilterMenu icon={<MapPin className="h-4 w-4" />} label="City" searchable value={city} onChange={setCity}
+              options={[{ value: "", label: "City" }, ...(summary.data?.cities ?? []).map((c) => ({ value: c, label: c }))]} />
+            <Button variant="secondary" onClick={() => setImporting(true)}><Upload className="h-4 w-4" />Import</Button>
+            <Button variant="secondary" onClick={() => void downloadFile("/people/export", exportParams(), "people.xlsx")}><Download className="h-4 w-4" />Export</Button>
+            <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add person</Button>
+          </div>
+        )}
       </div>
 
       {tab === "groups" ? (
         <div className="space-y-3">
           {accounts.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <FilterLabel />
-              <FilterSelect label="Client account" value={companyId} onChange={setCompanyId} all="All accounts" options={accounts.map((a) => ({ value: a.id, label: a.name }))} />
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-card">
+              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
+                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
+              <button type="button" onClick={() => setCompanyId("")} disabled={!companyId}
+                className="pressable ml-auto h-9 rounded-lg px-3 text-sm font-semibold text-brand hover:bg-brand-soft disabled:pointer-events-none disabled:opacity-40">
+                Clear all
+              </button>
             </div>
           )}
           <GroupsPanel companyId={companyId || undefined} accounts={accounts} showAccount={!companyId && accounts.length > 1} />
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput value={search} onChange={setSearch} placeholder="Search name, mobile, email, city" className="sm:w-72" />
-            <div className="ml-auto flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setImporting(true)}><FileUp className="h-4 w-4" />Import</Button>
-              <Button variant="secondary" onClick={() => void downloadFile("/people/export", exportParams(), "people.xlsx")}><Download className="h-4 w-4" />Export</Button>
-              <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add person</Button>
+          {/* Row 2: more filters, search and Clear all, in one card (the count is in the footer under the table) */}
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-card">
+            {accounts.length > 1 && (
+              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
+                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
+            )}
+            <FilterMenu icon={<Users className="h-4 w-4" />} label="Group" searchable width={280} value={groupId} onChange={setGroupId}
+              options={[{ value: "", label: "Group" }, ...(groups.data ?? []).map((g) => ({
+                value: g.id, label: g.name, hint: [`${g.count} ${g.count === 1 ? "person" : "people"}`, !companyId && accounts.length > 1 ? g.accountName : null].filter(Boolean).join(" · "),
+              }))]} />
+            <FilterMenu icon={<CalendarClock className="h-4 w-4" />} label="Upcoming occasion" value={upcoming} onChange={setUpcoming}
+              options={[{ value: "", label: "Upcoming occasion" }, ...UPCOMING]} />
+            <FilterMenu icon={<Archive className="h-4 w-4" />} label="Status" value={status} onChange={setStatus}
+              options={[{ value: "", label: "Status: Active" }, { value: "ARCHIVED", label: `Status: Archived${summary.data?.archived ? ` (${summary.data.archived})` : ""}` }, { value: "ALL", label: "All" }]} />
+            {/* Search takes the rest of the row (up to 18rem) and shrinks before it would wrap onto its own line. */}
+            <div className="flex min-w-[15rem] flex-1 items-center justify-end gap-1">
+              <SearchInput value={search} onChange={setSearch} placeholder="Search by name, mobile or city…" className="min-w-0 flex-1 sm:w-auto sm:max-w-[18rem]" />
+              <button type="button" onClick={() => { clear(); setSearch(""); }} disabled={!active && !search}
+                className="pressable h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-sm font-semibold text-brand hover:bg-brand-soft disabled:pointer-events-none disabled:opacity-40">
+                Clear all
+              </button>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <FilterLabel />
-            {accounts.length > 1 && <FilterSelect label="Client account" value={companyId} onChange={setCompanyId} all="All accounts" options={accounts.map((a) => ({ value: a.id, label: a.name }))} />}
-            <FilterSelect label="Relationship" value={relationship} onChange={setRelationship} all="All relationships" options={RELATIONSHIPS.map((r) => ({ value: r.value, label: r.label }))} />
-            <FilterSelect label="City" value={city} onChange={setCity} all="All cities" options={(summary.data?.cities ?? []).map((c) => ({ value: c, label: c }))} />
-            {!!groups.data?.length && <FilterSelect label="Group" value={groupId} onChange={setGroupId} all="All groups" options={groups.data.map((g) => ({ value: g.id, label: g.name }))} />}
-            <FilterSelect label="Upcoming occasion" value={upcoming} onChange={setUpcoming} all="Any occasion" options={UPCOMING} />
-            <FilterSelect label="Status" value={status} onChange={setStatus} all="Active" options={STATUSES} />
-            <ClearFilters count={active} onClear={clear} />
-            {list.data && <span className="t-meta ml-auto">{list.data.total} {list.data.total === 1 ? "person" : "people"}</span>}
           </div>
 
           {selected.size > 0 && (
@@ -205,12 +231,10 @@ export default function PeoplePage() {
               onDelete={(p) => setRemoving([p.id])}
             />
           )}
-          {list.data && pages > 1 && (
-            <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span>Page {page} of {pages} · {list.data.total} people</span>
-              <Button variant="secondary" disabled={page >= pages} onClick={() => setPage(page + 1)}>Next</Button>
-            </div>
+          {list.data && list.data.total > 0 && (
+            <Pagination page={page} pageSize={pageSize} total={list.data.total} loading={list.loading} noun={["person", "people"]}
+              onPage={(n) => { setPage(n); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+              onPageSize={changePageSize} />
           )}
         </>
       )}

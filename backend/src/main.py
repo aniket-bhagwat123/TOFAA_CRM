@@ -13,6 +13,8 @@ from src.core.errors import register_error_handlers
 from src.core.schema import ok
 from src.core.supabase import get_service_client
 from src.core.telemetry import install_telemetry
+from src.modules.integrations import gifting_people
+from src.modules.integrations.people_notice import install_people_notice
 
 
 @asynccontextmanager
@@ -40,9 +42,12 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024)  # the board and lists are large JSON
 install_cache_invalidation(app)
+install_people_notice(app)
 install_telemetry(app)
 register_error_handlers(app)
 app.include_router(api_router, prefix=settings.API_V1_STR)
+# People for TOFAA Gifting OS (server to server, API key): the CRM's own People endpoints, limited to one client
+app.mount(f"{settings.API_V1_STR}/integrations/gifting", gifting_people.app)
 
 
 @app.get("/health")

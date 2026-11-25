@@ -41,13 +41,16 @@ def test_banner_audience():
     assert banners.audience_allows("ADMIN", Role.ADMIN) and not banners.audience_allows("ADMIN", Role.KAM)
 
 
-def test_banner_picture_shape_size_and_type():
-    assert banners.check_picture(png(2000, 180)) == ("image/png", "png")
-    assert banners.check_picture(png(1000, 91))  # within 2%
-    with pytest.raises(AppError, match="1000 x 90 shape"):
-        banners.check_picture(png(1000, 200))
-    with pytest.raises(AppError, match="at least 500"):
-        banners.check_picture(png(400, 36))
+def test_banner_picture_is_any_wide_strip_at_any_size():
+    assert banners.check_picture(png(2000, 180)) == ("image/png", "png")  # the ideal 1000 x 90 shape
+    assert banners.check_picture(png(2167, 284))  # about 7.6 : 1
+    assert banners.check_picture(png(400, 36))  # small is fine: only the shape counts
+    assert banners.check_picture(png(400, 100))  # exactly 4 : 1
+    assert banners.check_picture(png(1200, 100))  # exactly 12 : 1
+    with pytest.raises(AppError, match="wide strip"):
+        banners.check_picture(png(1000, 300))  # 3.3 : 1, too tall
+    with pytest.raises(AppError, match="wide strip"):
+        banners.check_picture(png(1300, 100))  # 13 : 1, too thin
     with pytest.raises(AppError, match="PNG, JPEG or WebP"):
         banners.check_picture(b"GIF89a....")
     with pytest.raises(AppError, match="Choose a banner"):
