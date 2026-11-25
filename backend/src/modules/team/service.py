@@ -9,6 +9,7 @@ from src.core.dates import IST, today_ist
 from src.core.errors import ForbiddenError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile, Role
 from src.modules.leads.stages import CLOSED
 from src.modules.leads.value import decimal_value
@@ -40,7 +41,7 @@ def _summary(user: Profile) -> dict:
     start = datetime.combine(today, time.min, tzinfo=IST)
     leads, meetings = par(
         lambda: (
-            db.table("leads").select("id,owner_id,stage,next_follow_up,updated_at,value_band,estimate_amount,quote_amount,paid_amount,company:companies(name),contact:contacts(name)")
+            live(db.table("leads").select("id,owner_id,stage,next_follow_up,updated_at,value_band,estimate_amount,quote_amount,paid_amount,company:companies(name),contact:contacts(name)"))
         .in_("owner_id", ids).not_.in_("stage", list(CLOSED)).limit(5000).execute().data
         ),
         lambda: (

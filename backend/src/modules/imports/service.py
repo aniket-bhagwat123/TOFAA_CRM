@@ -12,6 +12,7 @@ from src.core.errors import AppError, ForbiddenError
 from src.core.keys import company_key, email_key, normalize_phone10, phone_key
 from src.core.validators import is_email
 from src.core.supabase import get_service_client
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile, Role
 from src.modules.imports.schemas import MAX_ROWS, CommitRequest, ImportRequest, ImportRow
 from src.modules.leads.stages import VALUE_BANDS
@@ -141,7 +142,7 @@ def _existing(clean_rows: list[dict]) -> tuple[dict, dict, dict]:
         for c in db.table("contacts").select("company_id,email_key").in_("email_key", part).execute().data:
             by_email[c["email_key"]] = c["company_id"]
     for part in _chunks(names):
-        for c in db.table("companies").select("id,name_key").in_("name_key", part).execute().data:
+        for c in live(db.table("companies").select("id,name_key"), "companies").in_("name_key", part).execute().data:
             by_name[c["name_key"]] = c["id"]
     return by_phone, by_email, by_name
 
@@ -150,8 +151,8 @@ def _leads_by_company(company_ids: list[str]) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for part in _chunks(company_ids):
         rows = (
-            get_service_client().table("leads")
-            .select("id,owner_id,stage,company_id,contact_id,source,notes,owner:profiles!owner_id(full_name)")
+            live(get_service_client().table("leads")
+            .select("id,owner_id,stage,company_id,contact_id,source,notes,owner:profiles!owner_id(full_name)"))
             .in_("company_id", part).order("created_at", desc=True).execute().data
         )
         for r in rows:

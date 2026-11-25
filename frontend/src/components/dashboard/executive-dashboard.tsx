@@ -1,5 +1,5 @@
 "use client";
-import { CalendarCheck, CalendarClock, FileText, KanbanSquare, PhoneCall, Target, TrendingUp } from "lucide-react";
+import { CalendarCheck, FileText, KanbanSquare, PhoneCall, Target, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { CallStatusBadge } from "@/components/crm/call-status-badge";
 import { TargetCard } from "@/components/crm/target-card";
@@ -26,11 +26,10 @@ export type ExecutiveData = {
 export function ExecutiveDashboard({ d }: { d: ExecutiveData }) {
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Due today and overdue are in the Today section above, so they are not repeated as tiles here. */}
+      <div className="grid grid-cols-2 gap-3">
         <Tile label="My pipeline" value={inrShort(d.pipeline.value)} hint={`${d.pipeline.count} open ${d.pipeline.count === 1 ? "deal" : "deals"}`} icon={KanbanSquare} href="/leads" />
         <Tile label="Weighted forecast" value={inrShort(d.pipeline.weighted)} hint="Value × stage probability" icon={TrendingUp} />
-        <Tile label="Overdue follow-ups" value={String(d.followUps.overdue)} hint="Call these first" icon={CalendarClock} tone={d.followUps.overdue ? "text-red-600" : ""} href="/follow-ups" />
-        <Tile label="Due today" value={String(d.followUps.today)} hint="Follow-ups for today" icon={CalendarCheck} href="/today" />
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-2">

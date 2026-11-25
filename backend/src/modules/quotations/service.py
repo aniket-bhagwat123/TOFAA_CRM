@@ -385,12 +385,21 @@ def send(user: Profile, quotation_id: str, body: schemas.SendQuotation) -> dict:
         )
     else:
         text = f"Hello {contact['name']}, here is our quotation {number} for {company}. Total: {total}.\nView or download: {link}"
-        try:
-            result.update(whatsapp.send(user, q["lead_id"], SendMessage(body=text)))
-        except AppError as exc:
-            if (exc.data or {}).get("code") != "template_required":
-                raise
-            # The 24-hour window is closed and a free message is not allowed: hand over a click-to-chat link instead.
+        sent = False
+        if whatsapp.api_enabled():
+            # From the company number: the message with a "View quotation" button that opens the PDF link.
+            try:
+                result.update(whatsapp.send_link_message(
+                    user, q["lead_id"], text=whatsapp.quotation_text(contact["name"], number, company, total), link=link,
+                    values=[contact["name"], number, company, total], base=share_links.short_url(""),
+                ))
+                sent = True
+            except AppError as exc:
+                if (exc.data or {}).get("code") != "template_required":
+                    raise
+                result["fallback"] = "template_required"  # no approved template yet: click-to-chat instead (below)
+        if not sent:
+            # No API, or the window is closed and no template: click-to-chat with the PDF link.
             result.update(whatsapp.send(user, q["lead_id"], SendMessage(body=text), force_click=True))
 
     db = get_service_client()

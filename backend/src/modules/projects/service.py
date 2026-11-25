@@ -8,6 +8,7 @@ from src.core import cache
 from src.core.access import require_lead_role
 from src.core.dates import today_ist
 from src.core.supabase import get_service_client
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile
 from src.modules.leads.service import _lead_filters
 from src.modules.leads.stages import CLIENT_STAGES, CLOSED
@@ -38,7 +39,7 @@ def summary(user: Profile, *, owner_id=None, company_id=None, occasion=None, ori
     require_lead_role(user)
 
     def load() -> dict:
-        q = get_service_client().table("leads").select("*")
+        q = live(get_service_client().table("leads").select("*"))
         q = _lead_filters(q, user, stage=None, overdue=False, source=None, owner_id=owner_id, search=search, pipeline="client",
                           company_id=company_id, occasion=occasion, origin=origin)
         return summarize(q.limit(3000).execute().data, today_ist())
@@ -52,7 +53,7 @@ def filters(user: Profile) -> dict:
     require_lead_role(user)
 
     def load() -> dict:
-        q = get_service_client().table("leads").select("company_id,occasion,company:companies(name)")
+        q = live(get_service_client().table("leads").select("company_id,occasion,company:companies(name)"))
         q = _lead_filters(q, user, stage=None, overdue=False, source=None, owner_id=None, search=None, pipeline="client")
         rows = q.limit(5000).execute().data
         clients = {r["company_id"]: (r.get("company") or {}).get("name") or "Client" for r in rows if r.get("company_id")}

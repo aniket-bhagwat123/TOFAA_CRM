@@ -1,17 +1,17 @@
 "use client";
-import { ArrowRight, Check, ChevronDown, ClipboardCheck, Columns3, Factory, PackageCheck, Table2, Truck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ClipboardCheck, Factory, PackageCheck, Truck } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { StateView } from "@/components/ui/state-view";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatDate } from "@/lib/format";
@@ -99,22 +99,7 @@ export default function OrdersPage() {
             {people.data?.map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
           </select>
         )}
-        <div className="ml-auto flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
-          {([["board", "Board view", Columns3], ["table", "Table view", Table2]] as const).map(([v, label, Icon]) => (
-            <Tooltip key={v} label={label}>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={layout === v}
-                aria-label={label}
-                onClick={() => chooseLayout(v)}
-                className={cn("pressable flex h-8 w-8 items-center justify-center rounded-lg", layout === v ? "bg-brand-soft text-brand" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")}
-              >
-                <Icon className="h-4 w-4" />
-              </button>
-            </Tooltip>
-          ))}
-        </div>
+        <ViewToggle value={layout} onChange={chooseLayout} options={BOARD_TABLE} className="ml-auto" />
       </div>
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {chip("", "All", counts ? Object.values(counts).reduce((a, b) => a + b, 0) : undefined)}

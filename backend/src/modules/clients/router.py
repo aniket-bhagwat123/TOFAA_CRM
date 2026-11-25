@@ -12,9 +12,9 @@ admin_only = Depends(require_roles(Role.ADMIN))
 @router.get("/clients")
 def list_clients(
     user: CurrentUserDep, search: str | None = None, tier: str | None = None, status: str | None = None,
-    ownerId: str | None = None, occasionSoon: bool = False,  # noqa: N803 - query names match the app
+    ownerId: str | None = None, occasionSoon: bool = False, noOccasions: bool = False,  # noqa: N803 - query names match the app
 ):
-    return ok(service.list_clients(user, search=search, tier=tier, status=status, owner_id=ownerId, occasion_soon=occasionSoon))
+    return ok(service.list_clients(user, search=search, tier=tier, status=status, owner_id=ownerId, occasion_soon=occasionSoon, no_occasions=noOccasions))
 
 
 @router.post("/clients", status_code=201)
@@ -42,6 +42,11 @@ def add_occasion(company_id: str, body: schemas.OccasionCreate, user: CurrentUse
     return ok(service.add_occasion(user, company_id, body), "Occasion added.")
 
 
+@router.delete("/clients/{company_id}")
+def delete_client(company_id: str, user: CurrentUserDep):
+    return ok(service.delete_client(user, company_id), "Client deleted.")
+
+
 @router.delete("/clients/{company_id}/occasions/{occasion_id}")
 def delete_occasion(company_id: str, occasion_id: str, user: CurrentUserDep):
     service.delete_occasion(user, company_id, occasion_id)
@@ -51,6 +56,11 @@ def delete_occasion(company_id: str, occasion_id: str, user: CurrentUserDep):
 @router.post("/clients/{company_id}/followups", status_code=201)
 def create_followup(company_id: str, body: schemas.FollowUpCreate, user: CurrentUserDep):
     return ok(service.create_followup(user, company_id, body), "Follow-up scheduled.")
+
+
+@router.post("/clients/{company_id}/calls")
+def log_client_call(company_id: str, body: schemas.FollowUpComplete, user: CurrentUserDep):
+    return ok(service.log_client_call(user, company_id, body), "Saved.")
 
 
 @router.post("/clients/{company_id}/followups/{task_id}/complete")

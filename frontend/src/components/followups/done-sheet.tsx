@@ -88,7 +88,7 @@ export function FollowUpDoneSheet({ item, onClose, onDone, onMoveStage }: Props)
 
   const option = "pressable flex w-full items-center gap-4 rounded-2xl border p-4 text-left";
   return (
-    <Sheet open={!!item} title="Follow-up done" subtitle={name} icon={CheckCircle2} tone="emerald" onClose={onClose}>
+    <Sheet open={!!item} title="Log outcome" subtitle={name} icon={CheckCircle2} tone="emerald" onClose={onClose}>
       {mode === "choose" && (
         <div className="space-y-3">
           <p className="t-body text-slate-500">What happens next?</p>

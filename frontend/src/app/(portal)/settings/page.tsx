@@ -132,7 +132,7 @@ export default function SettingsPage() {
   const role = useAppSelector((s) => s.auth.session?.profile.role);
   const router = useRouter();
   const [tab, setTab] = useState<(typeof TABS)[number]>("Pipeline");
-  useEffect(() => { if (role && role !== "admin") router.replace("/today"); }, [role, router]);
+  useEffect(() => { if (role && role !== "admin") router.replace("/dashboard"); }, [role, router]);
   if (role !== "admin") return null;
   return (
     <div className="space-y-4">

@@ -1,5 +1,5 @@
 "use client";
-import { Check, Plus, X } from "lucide-react";
+import { AlertTriangle, Check, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { VoiceTextarea } from "@/components/crm/voice-textarea";
@@ -12,10 +12,10 @@ import { StageBadge } from "@/components/ui/stage-badge";
 import { TimePicker } from "@/components/ui/time-picker";
 import { useApi } from "@/hooks/use-api";
 import { fieldErrors } from "@/lib/api-errors";
-import { istInputToIso, nextBusinessDayIso, todayIso } from "@/lib/format";
+import { formatDate, formatTime, istInputToIso, nextBusinessDayIso, todayIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
-import type { Lead } from "@/types/crm";
+import type { Lead, LeadDetail } from "@/types/crm";
 
 const TYPES = [
   { value: "call", label: "Call" },
@@ -50,6 +50,9 @@ export function AddTaskSheet({ open, onClose, onDone }: Props) {
   const projects = useApi<{ items: Lead[] }>(searching ? "/leads" : null, { search, limit: 5, pipeline: "client" });
   const results = [...(leads.data?.items ?? []), ...(projects.data?.items ?? [])].filter((l) => !CLOSED.has(l.stage));
   const loading = searching && (leads.loading || projects.loading);
+  // The lead's open follow-up, if any: adding a task replaces it, so say so before saving.
+  const detail = useApi<LeadDetail>(open && lead ? `/leads/${lead.id}` : null);
+  const current = detail.data?.lead.id === lead?.id ? (detail.data?.tasks ?? [])[0] : undefined;
 
   async function save() {
     const e: Record<string, string> = {};
@@ -64,7 +67,7 @@ export function AddTaskSheet({ open, onClose, onDone }: Props) {
     setBusy(true);
     try {
       await apiClient.post("/tasks", { leadId: lead.id, kind, dueDate: date, dueAt, title: note.trim().slice(0, 200) || null });
-      toast.success("Task added. It replaces the lead's earlier open follow-up.");
+      toast.success(current ? "Task added. It replaced the earlier follow-up." : "Task added");
       onClose();
       onDone();
     } catch (err) {
@@ -113,6 +116,16 @@ export function AddTaskSheet({ open, onClose, onDone }: Props) {
             </div>
           )}
           {errors.lead && <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">{errors.lead}</p>}
+          {lead && current && (
+            <p className="mt-2 flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-xs font-medium text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>
+                {leadName(lead)} already has a {TYPES.find((t) => t.value === current.kind)?.label.toLowerCase() ?? "follow-up"} on{" "}
+                {current.dueAt ? `${formatDate(current.dueAt)}, ${formatTime(current.dueAt).toUpperCase()}` : formatDate(current.dueDate)}
+                {current.title ? ` (“${current.title}”)` : ""}. Adding this task replaces it.
+              </span>
+            </p>
+          )}
         </div>
 
         <div>

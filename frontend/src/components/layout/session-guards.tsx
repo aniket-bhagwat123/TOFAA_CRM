@@ -44,17 +44,23 @@ export function SessionGuards() {
     if (!role || !hasLeadAccess(role)) return;
     if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission();
     let stopped = false;
+    const SEEN_KEY = "notifications.popped";
+    const seen = new Set<string>((() => { try { return JSON.parse(sessionStorage.getItem(SEEN_KEY) ?? "[]") as string[]; } catch { return []; } })());
+    const saveSeen = () => { try { sessionStorage.setItem(SEEN_KEY, JSON.stringify([...seen].slice(-200))); } catch { /* private mode */ } };
     async function poll() {
       try {
         const { data } = await apiClient.get<AppNotification[]>("/notifications");
-        if (stopped || !data.length) return;
-        data.forEach((n) => {
+        // Pop each new alert once. It stays unread in the bell (top bar) until it is opened or marked read there.
+        const fresh = data.filter((n) => !seen.has(n.id));
+        fresh.forEach((n) => seen.add(n.id));
+        saveSeen();
+        if (stopped || !fresh.length) return;
+        fresh.forEach((n) => {
           toast(n.title, { description: n.body ?? undefined, action: n.link ? { label: "Open", onClick: () => router.push(n.link!) } : undefined });
           if ("Notification" in window && Notification.permission === "granted" && document.hidden) {
             new Notification(n.title, { body: n.body ?? undefined });
           }
         });
-        await apiClient.post("/notifications/read", { ids: data.map((n) => n.id) });
       } catch {
         /* offline: try again next tick */
       }

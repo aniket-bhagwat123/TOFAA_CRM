@@ -7,6 +7,7 @@ import { EditLeadSheet } from "@/components/crm/edit-lead-sheet";
 import { leadTarget } from "@/components/crm/lead-card";
 import { useLeadActions } from "@/components/crm/use-lead-actions";
 import { AgreementCard, DealDetailsCard, MeetingNotesCard, MeetingsCard, QuotesCard, SamplesCard } from "@/components/lead/deal-cards";
+import { DeleteRecordDialog } from "@/components/crm/delete-record-dialog";
 import { LeadHeader } from "@/components/lead/lead-header";
 import { NoteSheet } from "@/components/lead/note-sheet";
 import { StageProgress } from "@/components/lead/stage-progress";
@@ -32,6 +33,8 @@ export type DealArea = "leads" | "projects";
 export function DealPage({ id, area }: { id: string; area: DealArea }) {
   const router = useRouter();
   const role = useAppSelector((s) => s.auth.session?.profile.role);
+  const me = useAppSelector((s) => s.auth.session?.profile.id);
+  const [deleting, setDeleting] = useState(false);
   const detail = useApi<LeadDetail>(`/leads/${id}`);
   const deal = useApi<DealData>(`/leads/${id}/deal`);
   const reloadAll = () => { void detail.reload(); void deal.reload(); };
@@ -96,6 +99,15 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
         onEdit={() => setEditing(true)}
         onReassign={() => actions.reassign(target)}
         onNote={() => setNoting(true)}
+        canDelete={!!role && (isManager(role) || (role === "sales_executive" && lead.ownerId === me))}
+        onDelete={() => setDeleting(true)}
+      />
+      <DeleteRecordDialog
+        open={deleting} kind="lead" path={`/leads/${lead.id}`}
+        name={lead.projectTitle && lead.pipeline === "client" ? `${lead.company.name} · ${lead.projectTitle}` : lead.company.name}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => router.push(lead.pipeline === "client" ? "/projects" : "/leads")}
+        onCloseAsLost={() => actions.close(target)}
       />
       <StageProgress stage={lead.stage} pipeline={pipeline} lostFrom={lead.lostFromStage} lostReason={lead.lostReason} onPick={(s) => actions.moveTo(target, s)} onReopen={(s) => actions.reopen(target, s)} onCloseLead={() => actions.close(target)} />
       <MeetingsCard meetings={upcoming} onDone={(m) => updateMeeting(m, "done")} onCancel={(m) => updateMeeting(m, "cancelled")} />

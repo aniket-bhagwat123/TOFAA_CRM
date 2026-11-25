@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCrumb } from "@/lib/crumb";
 import type { Profile } from "@/types/api";
+import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 
 const TITLES: [string, string][] = [
-  ["/today", "Today"],
   ["/follow-ups", "Follow-ups"],
   ["/leads", "Leads"],
   ["/projects", "Projects"],
@@ -48,7 +48,10 @@ export function Topbar({ user }: { user: Profile }) {
       ) : (
         <div className="min-w-0 truncate text-base font-semibold tracking-tight text-slate-900">{user.role === "kam" && path === "/clients" ? "My Accounts" : titleFor(path)}</div>
       )}
-      <UserMenu user={user} />
+      <div className="flex shrink-0 items-center gap-1.5">
+        <NotificationBell />
+        <UserMenu user={user} />
+      </div>
     </header>
   );
 }

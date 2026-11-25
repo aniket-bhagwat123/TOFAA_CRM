@@ -9,8 +9,9 @@ from src.core.errors import AppError, ForbiddenError, NotFoundError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
-from src.core.working_hours import schedule
+from src.core.working_hours import schedule, with_time
 from src.core.storage import AVATARS, signed_urls
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile
 from src.modules.leads.value import deal_value
 from src.modules.leads.stages import CLOSED
@@ -84,12 +85,11 @@ def set_next_action(
     except this one" while the insert and the lead update run alongside.
     """
     db = get_service_client()
-    due, due_at = schedule(due, due_at)  # never at night or on a day off: the next working morning instead
+    due, due_at = with_time(due, due_at)  # always a time (10:00 AM by default), never at night or on a day off
     task_id = str(uuid4())
     row = {"id": task_id, "lead_id": lead_id, "owner_id": owner_id, "kind": kind, "title": title, "due_date": due.isoformat()}
     # Only when set, so the insert still works on a database without migration 20260117000000_followup_snooze.sql.
-    if due_at:
-        row["due_at"] = due_at.isoformat()
+    row["due_at"] = due_at.isoformat()
     if client_requested:
         row["client_requested"] = True
     _, task, _ = par(
@@ -121,7 +121,7 @@ def complete_task(user: Profile, task_id: str, nxt: date | None, outcome: str | 
     task = rows[0]
     lead = task.pop("lead")
     if not lead:
-        raise AppError("This is a client follow-up. Finish it from the client card or the Today screen.", status_code=409)
+        raise AppError("This is a client follow-up. Finish it from the client card, Follow-ups, or Today on the Dashboard.", status_code=409)
     if not can_access_owner(user, task.get("owner_id")):
         raise ForbiddenError()
     if task.get("done_at"):
@@ -174,7 +174,7 @@ def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None,
         errors.append({"field": "dueDate", "message": "Pick today or a later date."})
     if errors:
         raise AppError("Some details are missing.", {"errors": errors}, 422)
-    due, due_at = schedule(due, due_at)  # "In 2 hrs" late in the day lands on the next working morning
+    due, due_at = with_time(due, due_at)  # "In 2 hrs" late in the day lands on the next working morning
 
     old_at = task.get("due_at") or f"{task['due_date']}T23:59:59+05:30"
     new_at = due_at.isoformat() if due_at else f"{due.isoformat()}T23:59:59+05:30"
@@ -262,7 +262,7 @@ def _build_today(user: Profile) -> dict:
 
 def leads_without_next_action(user: Profile, owner_ids: list[str] | None = None, with_owner: bool = False) -> list[dict]:
     """Open leads with no open task. Today screen: the user's own. Follow-ups board: everyone the viewer can see."""
-    q = get_service_client().table("leads").select(NO_ACTION_BRIEF if with_owner else LEAD_BRIEF).is_("next_follow_up", "null").not_.in_("stage", list(CLOSED))
+    q = live(get_service_client().table("leads").select(NO_ACTION_BRIEF if with_owner else LEAD_BRIEF)).is_("next_follow_up", "null").not_.in_("stage", list(CLOSED))
     if owner_ids is None and not with_owner:
         owner_ids = [user.id]
     if owner_ids is not None:

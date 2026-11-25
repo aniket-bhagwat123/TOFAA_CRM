@@ -62,7 +62,10 @@ def test_report_numbers():
     assert r["forecast"] == {"open": 2, "unweighted": 100000.0, "weighted": 70000.0}
     assert r["conversion"] == {"created": 4, "won": 1, "lost": 1, "wonValue": 50000.0, "winRate": 50.0}
     funnel = {f["stage"]: f["count"] for f in r["funnel"]}
-    assert funnel["new_lead"] == 4 and funnel["quotation_sent"] == 1 and funnel["closed_won"] == 1
+    # cumulative: the won lead (l3) also passed Quotation Sent, so 2 reached it; a funnel never widens
+    assert funnel["new_lead"] == 4 and funnel["quotation_sent"] == 2 and funnel["closed_won"] == 1
+    counts = [f["count"] for f in r["funnel"]]
+    assert counts == sorted(counts, reverse=True)
     assert r["lostReasons"] == [{"reason": "No budget", "count": 1}]
     assert {s["source"]: (s["leads"], s["won"]) for s in r["sources"]} == {"Referral": (3, 1), "Website": (1, 0)}
 

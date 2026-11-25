@@ -1,7 +1,7 @@
 import type { Role } from "@/types/api";
 
 export const homeFor = (role: Role) =>
-  role === "finance" ? "/payments" : role === "kam" ? "/clients" : role === "sales_manager" || role === "admin" ? "/dashboard" : "/today";
+  role === "finance" ? "/payments" : role === "kam" ? "/clients" : "/dashboard"; // sales executives too: "Today" is the top of their Dashboard
 
 export const isManager = (role: Role) => role === "sales_manager" || role === "admin";
 export const hasLeadAccess = (role: Role) => role === "sales_executive" || role === "sales_manager" || role === "admin" || role === "kam";

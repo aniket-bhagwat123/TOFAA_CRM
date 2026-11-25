@@ -24,6 +24,8 @@ from src.core.parallel import par
 from src.core.storage import CLIENT_IMAGES, signed_urls
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity, add_company_activity
+from src.core.working_hours import with_time
+from src.core.soft_delete import is_deleted, live, ready, require_ready
 from src.modules.auth.schemas import Profile, Role
 from src.modules.clients import schemas
 from src.modules.leads import service as leads
@@ -108,8 +110,8 @@ def _scope(user: Profile) -> list[str] | None:
 
 def _client(user: Profile, company_id: str) -> dict:
     rows = get_service_client().table("companies").select(COMPANY_SELECT).eq("id", company_id).limit(1).execute().data
-    if not rows or not rows[0].get("client_since"):
-        raise NotFoundError("Client not found.")
+    if not rows or not rows[0].get("client_since") or is_deleted(rows[0]):
+        raise NotFoundError("Client not found. It may have been deleted.")
     scope = _scope(user)
     if scope is not None and rows[0].get("account_owner_id") not in scope:
         raise ForbiddenError("This client belongs to someone else.")
@@ -127,14 +129,16 @@ def _stats(company_ids: list[str]) -> dict[str, dict]:
     if not company_ids:
         return {}
     db = get_service_client()
-    won, open_rows, occasions = par(
-        lambda: db.table("leads").select("company_id,paid_amount,closed_at,occasion").in_("company_id", company_ids).eq("stage", "closed_won").limit(10000).execute().data,
-        lambda: db.table("leads").select("company_id").in_("company_id", company_ids).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).limit(10000).execute().data,
+    won, open_rows, occasions, checkins = par(
+        lambda: live(db.table("leads").select("company_id,paid_amount,closed_at,occasion")).in_("company_id", company_ids).eq("stage", "closed_won").limit(10000).execute().data,
+        lambda: live(db.table("leads").select("company_id")).in_("company_id", company_ids).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).limit(10000).execute().data,
         lambda: db.table("client_occasions").select("*").in_("company_id", company_ids).execute().data,
+        lambda: db.table("tasks").select("company_id,title,due_date,due_at").in_("company_id", company_ids).is_("lead_id", "null")
+        .is_("done_at", "null").order("due_date").limit(10000).execute().data,
     )
     today, cal = today_ist(), calendar_dates()
     year_ago = today - timedelta(days=365)
-    out = {cid: {"lifetime": Decimal("0"), "revenue_12m": Decimal("0"), "last_order": None, "won": 0, "open": 0, "next_occasion": None, "won_occasions": set()} for cid in company_ids}
+    out = {cid: {"lifetime": Decimal("0"), "revenue_12m": Decimal("0"), "last_order": None, "won": 0, "open": 0, "next_occasion": None, "won_occasions": set(), "occasions": 0, "next_check_in": None} for cid in company_ids}
     for r in won:
         s = out[r["company_id"]]
         amount = to_money(r["paid_amount"]) if r.get("paid_amount") else Decimal("0")
@@ -149,7 +153,13 @@ def _stats(company_ids: list[str]) -> dict[str, dict]:
             s["won_occasions"].add(r["occasion"].strip().lower())
     for r in open_rows:
         out[r["company_id"]]["open"] += 1
+    for t in checkins:  # the client's next call (check-in, occasion, campaign, win-back): the earliest
+        s = out[t["company_id"]]
+        key = t.get("due_at") or f"{t['due_date']}T23:59:59+05:30"
+        if s["next_check_in"] is None or key < s["next_check_in"]["_key"]:
+            s["next_check_in"] = {"_key": key, "title": t.get("title"), "due_date": t["due_date"], "due_at": t.get("due_at")}
     for o in occasions:
+        out[o["company_id"]]["occasions"] += 1
         nxt = next_occurrence(o, cal, today)
         s = out[o["company_id"]]
         if nxt and (s["next_occasion"] is None or nxt < s["next_occasion"]["date"]):
@@ -171,6 +181,8 @@ def _summary(company: dict, s: dict) -> dict:
         "tier": company.get("tier_override") or tier_for(s["revenue_12m"]), "tier_is_manual": bool(company.get("tier_override")),
         "status": status_for(s["last_order"], _d(company.get("client_since")), s["open"], today),
         "next_occasion": {"name": nxt["name"], "date": nxt["date"].isoformat(), "days_away": nxt["days_away"]} if nxt else None,
+        "occasion_count": s["occasions"],
+        "next_check_in": {k: v for k, v in s["next_check_in"].items() if k != "_key"} if s["next_check_in"] else None,
     }
 
 
@@ -204,6 +216,13 @@ def on_deal_won(lead_id: str) -> None:
             notify(lead["owner_id"], f"client:{lead['company_id']}", f"{name} is now a client", "Add their gifting occasions so you call before each one.", f"/clients/{lead['company_id']}")
 
 
+def _company_deleted(company_id: str | None) -> bool:
+    if not company_id or not ready("companies"):
+        return False
+    rows = get_service_client().table("companies").select("deleted_at").eq("id", company_id).limit(1).execute().data
+    return bool(rows and rows[0].get("deleted_at"))
+
+
 def _contact_taken(phone: str | None, email: str | None, company_id: str | None = None) -> None:
     """Stop a second contact with a phone or email already in the CRM (on any company, or this one)."""
     pk, ek = phone_key(phone), email_key(email)
@@ -217,6 +236,7 @@ def _contact_taken(phone: str | None, email: str | None, company_id: str | None 
         hits = db.table("contacts").select(f"{base},alt_phone_key").or_(",".join([*phones, *([f"alt_phone_key.eq.{pk}"] if pk else []), *emails])).limit(5).execute().data
     except Exception:  # noqa: BLE001 - before migration 20260108000000 there is no alt_phone_key
         hits = db.table("contacts").select(base).or_(",".join([*phones, *emails])).limit(5).execute().data
+    hits = [h for h in hits if not _company_deleted(h.get("company_id"))]
     if not hits:
         return
     h = hits[0]
@@ -233,7 +253,7 @@ def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
     require_lead_role(user)
     db = get_service_client()
     if body.company_id:
-        company = db.table("companies").select("id,client_since").eq("id", body.company_id).limit(1).execute().data
+        company = live(db.table("companies").select("id,client_since").eq("id", body.company_id), "companies").limit(1).execute().data
         if not company:
             raise NotFoundError("Company not found.")
         if user.role == Role.SALES_EXECUTIVE:
@@ -242,7 +262,7 @@ def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
                 raise ForbiddenError("You can only turn your own leads' companies into clients.")
         company_id = body.company_id
     else:
-        existing = db.table("companies").select("id,client_since").eq("name_key", company_key(body.company_name)).limit(1).execute().data
+        existing = live(db.table("companies").select("id,client_since").eq("name_key", company_key(body.company_name)), "companies").limit(1).execute().data
         if existing:
             raise ConflictError("This company is already in the CRM.", data={"companyId": existing[0]["id"], "isClient": bool(existing[0].get("client_since"))})
         _contact_taken(body.phone, body.email)  # the same person under another company name is still a duplicate
@@ -262,15 +282,15 @@ def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
 
 # --- reading -------------------------------------------------------------------------------------------------------------------------
 
-def list_clients(user: Profile, *, search: str | None, tier: str | None, status: str | None, owner_id: str | None, occasion_soon: bool) -> list[dict]:
+def list_clients(user: Profile, *, search: str | None, tier: str | None, status: str | None, owner_id: str | None, occasion_soon: bool, no_occasions: bool = False) -> list[dict]:
     require_lead_role(user)
-    params = {"q": search, "t": tier, "s": status, "o": owner_id, "soon": occasion_soon}
-    return cache.memo("clients", user.id, params, 20, lambda: _list(user, search, tier, status, owner_id, occasion_soon))
+    params = {"q": search, "t": tier, "s": status, "o": owner_id, "soon": occasion_soon, "no": no_occasions}
+    return cache.memo("clients", user.id, params, 20, lambda: _list(user, search, tier, status, owner_id, occasion_soon, no_occasions))
 
 
-def _list(user, search, tier, status, owner_id, occasion_soon) -> list[dict]:
+def _list(user, search, tier, status, owner_id, occasion_soon, no_occasions=False) -> list[dict]:
     scope = _scope(user)
-    q = get_service_client().table("companies").select(COMPANY_SELECT).not_.is_("client_since", "null")
+    q = live(get_service_client().table("companies").select(COMPANY_SELECT), "companies").not_.is_("client_since", "null")
     if owner_id:
         if scope is not None and owner_id not in scope:
             raise ForbiddenError()
@@ -286,6 +306,8 @@ def _list(user, search, tier, status, owner_id, occasion_soon) -> list[dict]:
         items = [i for i in items if i["tier"] == tier]
     if status in ("active", "dormant"):
         items = [i for i in items if i["status"] == status]
+    if no_occasions:  # clients the occasion reminders cannot work for yet
+        items = [i for i in items if not i["occasion_count"]]
     if occasion_soon:
         items = [i for i in items if i["next_occasion"] and i["next_occasion"]["days_away"] <= SOON_DAYS]
         items.sort(key=lambda i: i["next_occasion"]["days_away"])
@@ -303,7 +325,7 @@ def _detail(user: Profile, company_id: str) -> dict:
     company = _client(user, company_id)
     db = get_service_client()
     projects, occasions, followups, stats = par(
-        lambda: db.table("leads").select(leads.LEAD_SELECT).eq("company_id", company_id).order("created_at", desc=True).limit(200).execute().data,
+        lambda: live(db.table("leads").select(leads.LEAD_SELECT)).eq("company_id", company_id).order("created_at", desc=True).limit(200).execute().data,
         lambda: db.table("client_occasions").select("*").eq("company_id", company_id).order("created_at").execute().data,
         lambda: db.table("tasks").select("*").eq("company_id", company_id).is_("done_at", "null").order("due_date").execute().data,
         lambda: _stats([company_id]),
@@ -395,44 +417,69 @@ def delete_occasion(user: Profile, company_id: str, occasion_id: str) -> None:
 
 # --- client follow-ups (occasion calls, check-ins) ------------------------------------------------------------------------------------------
 
+def _set_check_in(company_id: str, owner_id: str | None, due: date, title: str, campaign_id: str | None = None) -> dict:
+    """A client's next check-in. One at a time, like a deal's next action: scheduling a new one replaces the open one
+    (occasion calls and campaign calls are separate, they are not touched). Every check-in gets a time, so it rings."""
+    db = get_service_client()
+    due, due_at = with_time(due, None)
+    task_id = str(uuid4())
+    if not campaign_id:
+        db.table("tasks").update({"done_at": now_ist().isoformat(), "outcome": "superseded"}).eq("company_id", company_id) \
+            .is_("lead_id", "null").is_("done_at", "null").is_("campaign_id", "null").is_("occasion_key", "null").neq("id", task_id).execute()
+    return db.table("tasks").insert(
+        {"id": task_id, "company_id": company_id, "owner_id": owner_id, "kind": "follow_up", "title": title,
+         "due_date": due.isoformat(), "due_at": due_at.isoformat(), "campaign_id": campaign_id}
+    ).execute().data[0]
+
+
 def create_followup(user: Profile, company_id: str, body: schemas.FollowUpCreate) -> dict:
     company = _client(user, company_id)
     if body.due_date < today_ist():
         raise AppError("Pick a date from today onwards.", {"errors": [{"field": "dueDate", "message": "Pick a date from today onwards."}]}, 422)
-    return get_service_client().table("tasks").insert(
-        {"id": str(uuid4()), "company_id": company_id, "owner_id": company.get("account_owner_id") or user.id, "kind": "follow_up",
-         "title": (body.title or "").strip() or "Check in with the client", "due_date": body.due_date.isoformat()}
-    ).execute().data[0]
+    return _set_check_in(company_id, company.get("account_owner_id") or user.id, body.due_date, (body.title or "").strip() or "Check in with the client")
 
 
-def complete_followup(user: Profile, company_id: str, task_id: str, body: schemas.FollowUpComplete) -> dict:
+def log_client_call(user: Profile, company_id: str, body: schemas.FollowUpComplete) -> dict:
+    """A call made from the client page or the client list. If the client has an open call or check-in, the outcome
+    finishes it; otherwise the call is just recorded (and can still set the next check-in or start a project)."""
+    _client(user, company_id)
+    open_tasks = (
+        get_service_client().table("tasks").select("id").eq("company_id", company_id).is_("lead_id", "null")
+        .is_("done_at", "null").order("due_date").limit(1).execute().data
+    )
+    return complete_followup(user, company_id, open_tasks[0]["id"] if open_tasks else None, body)
+
+
+def complete_followup(user: Profile, company_id: str, task_id: str | None, body: schemas.FollowUpComplete) -> dict:
     company = _client(user, company_id)
     db = get_service_client()
-    rows = db.table("tasks").select("*").eq("id", task_id).eq("company_id", company_id).limit(1).execute().data
-    if not rows:
-        raise NotFoundError("Follow-up not found.")
-    task = rows[0]
-    if task.get("done_at"):
-        raise AppError("This follow-up is already done.")
+    task: dict = {"title": "Call"}
+    if task_id:
+        rows = db.table("tasks").select("*").eq("id", task_id).eq("company_id", company_id).limit(1).execute().data
+        if not rows:
+            raise NotFoundError("Follow-up not found.")
+        task = rows[0]
+        if task.get("done_at"):
+            raise AppError("This follow-up is already done.")
     if body.outcome == "no_answer" and not body.next_follow_up:
         raise AppError("Pick when to try again.", {"errors": [{"field": "nextFollowUp", "message": "Pick when to try again."}]}, 422)
     if body.outcome == "interested" and not (body.project_title or "").strip():
         raise AppError("Name the project.", {"errors": [{"field": "projectTitle", "message": "Name the project, for example Diwali gifting 2027."}]}, 422)
 
-    labels = {"interested": "Interested", "not_now": "Not this time", "no_answer": "No answer", "done": "Done"}
-    db.table("tasks").update({"done_at": now_ist().isoformat(), "outcome": body.outcome}).eq("id", task_id).execute()
+    labels = {"interested": "Interested", "not_now": "Not interested", "no_answer": "Not reachable", "done": "Check-in done"}
+    if task_id:
+        db.table("tasks").update({"done_at": now_ist().isoformat(), "outcome": body.outcome}).eq("id", task_id).execute()
     add_company_activity(company_id, user.id, "call", outcome=body.outcome, note=f"{task.get('title') or 'Follow-up'}: {labels[body.outcome]}" + (f". {body.note.strip()}" if body.note and body.note.strip() else ""))
 
     project = None
     if body.outcome == "interested":
-        occasion = occasion_from_title(task.get("title")) if (task.get("occasion_key") or task.get("campaign_id")) else None
+        from_occasion = (task.get("occasion_key") and not task["occasion_key"].startswith("winback:")) or task.get("campaign_id")
+        occasion = occasion_from_title(task.get("title")) if from_occasion else None
         project = create_project(user, company_id, schemas.ProjectCreate(title=body.project_title.strip(), occasion=occasion, origin="occasion", notes=body.note))
     if body.next_follow_up and body.outcome in ("no_answer", "done", "not_now"):
         title = task.get("title") if body.outcome == "no_answer" else "Check in with the client"
-        db.table("tasks").insert(
-            {"id": str(uuid4()), "company_id": company_id, "owner_id": company.get("account_owner_id") or user.id, "kind": "follow_up",
-             "title": title, "due_date": body.next_follow_up.isoformat(), "campaign_id": task.get("campaign_id") if body.outcome == "no_answer" else None}
-        ).execute()
+        _set_check_in(company_id, company.get("account_owner_id") or user.id, body.next_follow_up, title,
+                      task.get("campaign_id") if body.outcome == "no_answer" else None)
     if task.get("campaign_id"):
         patch = {"outcome": body.outcome if body.outcome != "done" else "interested", "updated_at": now_ist().isoformat()}
         if project:
@@ -464,7 +511,7 @@ def create_project(user: Profile, company_id: str, body: schemas.ProjectCreate) 
     db = get_service_client()
     # The same project twice (a double tap, or a re-entry) is a duplicate: one open project per name per client.
     title_key = " ".join(body.title.split()).lower()
-    open_projects = db.table("leads").select("id,project_title,stage").eq("company_id", company_id).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).execute().data
+    open_projects = live(db.table("leads").select("id,project_title,stage")).eq("company_id", company_id).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).execute().data
     same = next((p for p in open_projects if " ".join((p.get("project_title") or "").split()).lower() == title_key), None)
     if same:
         raise ConflictError(
@@ -530,9 +577,10 @@ def ensure_occasion_reminders(user: Profile) -> None:
 
 def _make_reminders(user: Profile) -> None:
     db = get_service_client()
-    companies = db.table("companies").select("id,name").eq("account_owner_id", user.id).not_.is_("client_since", "null").execute().data
+    companies = live(db.table("companies").select("id,name,client_since"), "companies").eq("account_owner_id", user.id).not_.is_("client_since", "null").execute().data
     if not companies:
         return
+    _make_winbacks(user, companies)
     occasions = db.table("client_occasions").select("*").in_("company_id", [c["id"] for c in companies]).execute().data
     today, cal = today_ist(), calendar_dates()
     wanted = {}
@@ -547,11 +595,42 @@ def _make_reminders(user: Profile) -> None:
         if key in have:
             continue
         try:
+            due, due_at = with_time(today, None)  # a time, so it rings
             db.table("tasks").insert(
-                {"id": str(uuid4()), "company_id": o["company_id"], "owner_id": user.id, "kind": "follow_up",
-                 "title": f"{o['name']} on {nxt:%d %b}: ask about gifting", "due_date": today.isoformat(), "occasion_key": key}
+                {"id": str(uuid4()), "company_id": o["company_id"], "owner_id": user.id, "kind": "call",
+                 "title": f"{o['name']} on {nxt:%d %b}: ask about gifting", "due_date": due.isoformat(), "due_at": due_at.isoformat(), "occasion_key": key}
             ).execute()
         except Exception:  # noqa: BLE001 - another request made it a moment ago (the key is unique)
+            pass
+
+
+def _make_winbacks(user: Profile, companies: list[dict]) -> None:
+    """A client that has gone dormant (no order for CLIENT_DORMANT_DAYS and nothing in progress) gets one win-back call
+    for its owner. Once per dormant spell: the key is the date it went quiet, so a new order and a later quiet spell
+    make a new one."""
+    db = get_service_client()
+    stats, today = _stats([c["id"] for c in companies]), today_ist()
+    wanted = {}
+    for c in companies:
+        s = stats[c["id"]]
+        if status_for(s["last_order"], _d(c.get("client_since")), s["open"], today) != "dormant":
+            continue
+        since = s["last_order"] or _d(c.get("client_since"))
+        wanted[f"winback:{c['id']}:{since.isoformat() if since else 'never'}"] = (c, since)
+    if not wanted:
+        return
+    have = {r["occasion_key"] for r in db.table("tasks").select("occasion_key").in_("occasion_key", list(wanted)).execute().data}
+    for key, (c, since) in wanted.items():
+        if key in have:
+            continue
+        due, due_at = with_time(today, None)
+        try:
+            db.table("tasks").insert(
+                {"id": str(uuid4()), "company_id": c["id"], "owner_id": user.id, "kind": "call",
+                 "title": f"Win-back call: no order since {since:%d %b %Y}" if since else "Win-back call: no order yet",
+                 "due_date": due.isoformat(), "due_at": due_at.isoformat(), "occasion_key": key}
+            ).execute()
+        except Exception:  # noqa: BLE001 - made a moment ago by another request (the key is unique)
             pass
 
 
@@ -586,7 +665,7 @@ def create_campaign(user: Profile, body: schemas.CampaignCreate) -> dict:
     scope = _scope(user)
     db = get_service_client()
     name_key = body.occasion.strip().lower()
-    q = db.table("companies").select("id,name,account_owner_id").not_.is_("client_since", "null")
+    q = live(db.table("companies").select("id,name,account_owner_id"), "companies").not_.is_("client_since", "null")
     if scope is not None:
         q = q.in_("account_owner_id", scope)
     clients = q.limit(5000).execute().data
@@ -595,7 +674,7 @@ def create_campaign(user: Profile, body: schemas.CampaignCreate) -> dict:
         raise AppError("There are no clients to call yet.", status_code=422)
     occ, won = par(
         lambda: db.table("client_occasions").select("company_id,name").in_("company_id", ids).execute().data,
-        lambda: db.table("leads").select("company_id,occasion").in_("company_id", ids).not_.is_("occasion", "null").execute().data,
+        lambda: live(db.table("leads").select("company_id,occasion")).in_("company_id", ids).not_.is_("occasion", "null").execute().data,
     )
     # Who to call: clients who have this occasion on their card, or who have had a project for it before.
     match = {r["company_id"] for r in occ if r["name"].strip().lower() == name_key} | {r["company_id"] for r in won if (r["occasion"] or "").strip().lower() == name_key}
@@ -603,7 +682,7 @@ def create_campaign(user: Profile, body: schemas.CampaignCreate) -> dict:
     if not targets:
         raise AppError(f"No client has {body.occasion.strip()} as an occasion or a past {body.occasion.strip()} project yet.", status_code=422)
 
-    due = body.due_date or today_ist()
+    due, due_at = with_time(body.due_date or today_ist(), None)  # a time, so every campaign call rings
     when = f" on {body.occurs_on:%d %b}" if body.occurs_on else ""
     campaign = db.table("campaigns").insert(
         {"name": (body.name or "").strip() or f"{body.occasion.strip()} {(body.occurs_on or today_ist()).year}", "occasion": body.occasion.strip(),
@@ -612,10 +691,11 @@ def create_campaign(user: Profile, body: schemas.CampaignCreate) -> dict:
     db.table("campaign_targets").insert([{"campaign_id": campaign["id"], "company_id": c["id"]} for c in targets]).execute()
     db.table("tasks").insert(
         [{"id": str(uuid4()), "company_id": c["id"], "owner_id": c.get("account_owner_id") or user.id, "kind": "follow_up",
-          "title": f"{body.occasion.strip()}{when}: ask about gifting", "due_date": due.isoformat(), "campaign_id": campaign["id"]} for c in targets]
+          "title": f"{body.occasion.strip()}{when}: ask about gifting", "due_date": due.isoformat(), "due_at": due_at.isoformat(),
+          "campaign_id": campaign["id"]} for c in targets]
     ).execute()
     for owner in {c.get("account_owner_id") for c in targets if c.get("account_owner_id") and c.get("account_owner_id") != user.id}:
-        notify(owner, f"campaign:{campaign['id']}", f"{campaign['name']}: clients to call", "They are on your Today screen.", "/today")
+        notify(owner, f"campaign:{campaign['id']}", f"{campaign['name']}: clients to call", "They are in Today on your Dashboard and in Follow-ups.", "/follow-ups")
     write_audit(user.id, "create", "campaigns", campaign["id"], {"targets": len(targets)})
     return {"id": campaign["id"], "name": campaign["name"], "targets": len(targets)}
 
@@ -641,3 +721,34 @@ def list_campaigns(user: Profile) -> list[dict]:
             continue
         out.append({**c, "counts": n, "total": sum(n.values())})
     return out
+
+
+# --- soft delete -----------------------------------------------------------------------------------------------------
+
+def delete_client(user: Profile, company_id: str) -> dict:
+    """Soft delete a client added by mistake (a duplicate, test data). Only when it has no business in the CRM: a client
+    with any deal, project or order is kept, because revenue, orders and reports depend on it. Managers and admins only.
+    Its open check-ins are closed; contacts and occasions stay with the deleted record."""
+    require_ready("companies")
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
+        raise ForbiddenError("Only a manager or an admin can delete a client.")
+    company = _client(user, company_id)
+    db = get_service_client()
+    deals = live(db.table("leads").select("id,pipeline,stage")).eq("company_id", company_id).execute().data
+    if deals:
+        won = sum(1 for d in deals if d["stage"] == "closed_won")
+        projects = sum(1 for d in deals if d.get("pipeline") == "client" and d["stage"] != "closed_won")
+        others = len(deals) - won - projects
+        counts = [(won, "won order", "won orders"), (projects, "project", "projects"), (others, "deal", "deals")]
+        parts = [f"{n} {one if n == 1 else many}" for n, one, many in counts if n]
+        listed = parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+        raise ConflictError(
+            f"{company['name']} can't be deleted because it has {listed}. Clients with business history are kept for "
+            "revenue, orders and reports.",
+            data={"blockers": [{"what": many if n != 1 else one, "count": n} for n, one, many in counts if n]},
+        )
+    now = now_ist().isoformat()
+    db.table("companies").update({"deleted_at": now, "deleted_by": user.id}).eq("id", company_id).execute()
+    db.table("tasks").update({"done_at": now, "outcome": "deleted"}).eq("company_id", company_id).is_("lead_id", "null").is_("done_at", "null").execute()
+    write_audit(user.id, "delete", "clients", company_id, {"name": company["name"]})
+    return {"id": company_id, "deleted": True}

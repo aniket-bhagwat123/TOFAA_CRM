@@ -1,5 +1,5 @@
 "use client";
-import { Ban, Columns3, FileUp, KanbanSquare, Plus, Table2 } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { BoardCard } from "@/components/crm/board-card";
@@ -9,13 +9,13 @@ import { ImportModal } from "@/components/crm/import-modal";
 import { leadTarget } from "@/components/crm/lead-card";
 import { LeadFormSheet } from "@/components/crm/lead-form-sheet";
 import { LeadTable } from "@/components/crm/lead-table";
-import { LostBoard } from "@/components/crm/lost-board";
 import { useLeadActions } from "@/components/crm/use-lead-actions";
 import { Button } from "@/components/ui/button";
+import { ClearFilters, FilterLabel, FilterSelect, FilterToggle } from "@/components/ui/filter-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
-import { Tooltip } from "@/components/ui/tooltip";
+import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -27,7 +27,7 @@ import type { Paged } from "@/types/api";
 import type { AssignableUser, Lead, StageKey } from "@/types/crm";
 
 type Column = { key: string; label: string; stages: StageKey[]; dropTo: StageKey };
-type View = "board" | "table" | "lost";
+type View = "board" | "table";
 type Layout = "board" | "table";
 
 // Board columns. Won and Lost each get their own column at the end. (Client projects live in Projects.)
@@ -43,7 +43,6 @@ const COLUMNS: Column[] = [
   { key: "lost", label: "Lost", stages: ["closed_lost"], dropTo: "closed_lost" },
 ];
 const VIEW_KEY = "tofaa-leads-view";
-const select = "h-10 w-full shrink-0 truncate rounded-xl border border-slate-300/80 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15 sm:w-36";
 
 /**
  * Leads: one module, two ways to look at the same deals.
@@ -56,7 +55,7 @@ export default function LeadsPage() {
   const manager = !!user && isManager(user.role);
 
   const [view, setView] = useState<View>("board");
-  const [layout, setLayout] = useState<Layout>("board"); // how the Pipeline tab looks, kept while visiting Lost
+  const [layout, setLayout] = useState<Layout>("board");
   const [search, setSearch] = useState("");
   const [stage, setStage] = useState("");
   const [source, setSource] = useState("");
@@ -78,10 +77,10 @@ export default function LeadsPage() {
     const p = new URLSearchParams(window.location.search);
     let saved: View | null = null;
     try { saved = localStorage.getItem(VIEW_KEY) as View | null; } catch { /* storage unavailable */ }
-    const known = (v: string | null): View | null => (v === "cards" ? "table" : v === "board" || v === "table" || v === "lost" ? v : null);
+    // "lost" was a view once (the Lost tab, removed): old links and saved choices fall back to the board
+    const known = (v: string | null): View | null => (v === "cards" ? "table" : v === "board" || v === "table" ? v : v === "lost" ? "board" : null);
     const start = known(p.get("view")) ?? known(saved) ?? (window.innerWidth < 768 ? "table" : "board");
-    const savedLayout = known(saved);
-    setLayout(start !== "lost" ? start : savedLayout && savedLayout !== "lost" ? savedLayout : "board");
+    setLayout(start);
     setView(start);
     if (p.get("pipeline") === "client") { router.replace("/projects"); return; } // client projects moved to Projects
     if (p.get("new") === "1") setAddOpen(true);
@@ -94,11 +93,10 @@ export default function LeadsPage() {
     setView(v);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
   };
-  const chooseTab = (t: "pipeline" | "lost") => setView(t === "lost" ? "lost" : layout);
   const reset = (fn: () => void) => { fn(); setPage(1); };
 
   const common = { search: q, source, callOutcome: callStatus || undefined, tag: tag || undefined, ownerId: owner, overdue: overdue || undefined, pipeline: "new_business" };
-  const board = useApi<Lead[]>(view !== "table" ? "/leads/board" : null, view === "lost" ? { ...common, overdue: undefined } : common);
+  const board = useApi<Lead[]>(view === "board" ? "/leads/board" : null, common);
   const list = useApi<Paged<Lead>>(view === "table" ? "/leads" : null, { ...common, stage, page, limit: 25 });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const reload = () => { void board.reload(); void list.reload(); };
@@ -107,10 +105,11 @@ export default function LeadsPage() {
   const columns = COLUMNS;
   const boardLeads = board.data ?? [];
   const byColumn = useMemo(() => Object.fromEntries(columns.map((c) => [c.key, boardLeads.filter((l) => c.stages.includes(l.stage))])), [boardLeads, columns]);
-  const lostLeads = useMemo(() => boardLeads.filter((l) => l.stage === "closed_lost"), [boardLeads]);
-  const filtering = !!(q || source || callStatus || tag || owner || (view !== "lost" && overdue) || (view === "table" && stage));
+  const filtering = !!(q || source || callStatus || tag || owner || overdue || (view === "table" && stage));
+  const activeFilters = [q, source, callStatus, tag, owner, overdue ? "1" : "", view === "table" ? stage : ""].filter(Boolean).length;
+  const shown = view === "table" ? list.data?.meta.total : board.data?.length;
   const active = view === "table" ? list : board;
-  const isEmpty = view === "table" ? (list.data?.items.length ?? 0) === 0 : view === "lost" ? lostLeads.length === 0 : boardLeads.length === 0;
+  const isEmpty = view === "table" ? (list.data?.items.length ?? 0) === 0 : boardLeads.length === 0;
 
   function drop(col: Column) {
     const lead = boardLeads.find((l) => l.id === dragId);
@@ -123,87 +122,40 @@ export default function LeadsPage() {
     else actions.moveTo(leadTarget(lead), col.dropTo);
   }
 
-  const tab = <T extends string>(value: T, current: T, onPick: (v: T) => void, label: string, Icon?: typeof Columns3) => (
-    <button
-      key={value}
-      type="button"
-      role="tab"
-      aria-selected={current === value}
-      onClick={() => onPick(value)}
-      className={cn("pressable flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-sm font-medium", current === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
-    >
-      {Icon && <Icon className="h-4 w-4" />} {label}
-    </button>
-  );
   const addButton = <Button onClick={() => setAddOpen(true)}><Plus className="h-4 w-4" /> Add lead</Button>;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader title="Leads" />
 
-      {/* tabs on the left; search and the board / table switch on the right */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex gap-1 rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Leads">
-          {tab<"pipeline" | "lost">("pipeline", view === "lost" ? "lost" : "pipeline", chooseTab, "Pipeline", KanbanSquare)}
-          {tab<"pipeline" | "lost">("lost", view === "lost" ? "lost" : "pipeline", chooseTab, "Lost", Ban)}
-        </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <SearchInput className="min-w-0 flex-1 sm:w-64 sm:flex-none xl:w-72" value={search} onChange={(v) => reset(() => setSearch(v))} placeholder="Search" />
-          <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /> Import</Button>
-          {view !== "lost" && (
-            <div className="flex h-10 shrink-0 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
-              {([["board", "Board view", Columns3], ["table", "Table view", Table2]] as const).map(([v, label, Icon]) => (
-                <Tooltip key={v} label={label}>
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={layout === v}
-                    aria-label={label}
-                    onClick={() => chooseLayout(v)}
-                    className={cn("pressable flex h-8 w-8 items-center justify-center rounded-lg", layout === v ? "bg-brand-soft text-brand" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
-                </Tooltip>
-              ))}
-            </div>
-          )}
+      {/* Row 1: search on the left; layout switch, Import and Add lead on the right */}
+      <div className="flex flex-wrap items-center gap-2">
+        <SearchInput className="min-w-0 flex-1 sm:max-w-sm" value={search} onChange={(v) => reset(() => setSearch(v))} placeholder="Search company, contact, phone" />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          <ViewToggle value={layout} onChange={chooseLayout} options={BOARD_TABLE} />
+          <Button variant="secondary" className="shrink-0" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /><span className="hidden sm:inline">Import</span></Button>
+          {addButton}
         </div>
       </div>
 
-      {/* filters on the left, actions on the right */}
-      <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
+      {/* Row 2: filters (an active one turns blue), Clear, and how many leads are shown */}
+      <div className="flex flex-wrap items-center gap-2">
+        <FilterLabel />
         {view === "table" && (
-          <select className={select} value={stage} onChange={(e) => reset(() => setStage(e.target.value))} aria-label="Stage">
-            <option value="">All stages</option>
-            {columns.flatMap((c) => c.stages).map((s) => <option key={s} value={s}>{STAGE_LABEL[s]}</option>)}
-          </select>
+          <FilterSelect label="Stage" all="All stages" value={stage} onChange={(v) => reset(() => setStage(v))}
+            options={columns.flatMap((c) => c.stages).map((s) => ({ value: s, label: STAGE_LABEL[s] }))} />
         )}
-        <select className={select} value={source} onChange={(e) => reset(() => setSource(e.target.value))} aria-label="Source">
-          <option value="">All sources</option>
-          {(actions.meta?.sources ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select className={select} value={callStatus} onChange={(e) => reset(() => setCallStatus(e.target.value))} aria-label="Call status">
-          <option value="">All call statuses</option>
-          {CALL_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        <select className={select} value={tag} onChange={(e) => reset(() => setTag(e.target.value))} aria-label="Tag">
-          <option value="">All tags</option>
-          {TAG_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-        </select>
-        {user && (
-          <select className={select} value={owner} onChange={(e) => reset(() => setOwner(e.target.value))} aria-label="Owner">
-            <option value="">{manager ? "Whole team" : "My deals"}</option>
-            {manager && <option value={user.id}>My deals</option>}
-            {people.data?.filter((p) => p.id !== user.id).map((p) => <option key={p.id} value={p.id}>{p.fullName}</option>)}
-          </select>
+        <FilterSelect label="Source" all="All sources" value={source} onChange={(v) => reset(() => setSource(v))}
+          options={(actions.meta?.sources ?? []).map((s) => ({ value: s, label: s }))} />
+        <FilterSelect label="Call status" all="All call statuses" value={callStatus} onChange={(v) => reset(() => setCallStatus(v))} options={CALL_STATUS_OPTIONS} />
+        <FilterSelect label="Tag" all="All tags" value={tag} onChange={(v) => reset(() => setTag(v))} options={TAG_OPTIONS} />
+        {manager && user && (
+          <FilterSelect label="Owner" all="Whole team" value={owner} onChange={(v) => reset(() => setOwner(v))}
+            options={[{ value: user.id, label: "My deals" }, ...(people.data ?? []).filter((p) => p.id !== user.id).map((p) => ({ value: p.id, label: p.fullName ?? "Unnamed" }))]} />
         )}
-        {view !== "lost" && <button type="button" onClick={() => reset(() => setOverdue((o) => !o))} aria-pressed={overdue} className={cn("pressable h-10 shrink-0 rounded-xl border px-4 text-sm font-medium", overdue ? "border-red-300 bg-red-50 text-red-700" : "border-slate-300/80 bg-white text-slate-600")}>
-          Overdue
-        </button>}
-        <div className="ml-auto flex shrink-0 items-center gap-2">
-          {addButton}
-        </div>
+        <FilterToggle on={overdue} onChange={(on) => reset(() => setOverdue(on))} tone="red">Overdue</FilterToggle>
+        <ClearFilters count={activeFilters} onClear={() => reset(() => { setSearch(""); setStage(""); setSource(""); setCallStatus(""); setTag(""); setOwner(""); setOverdue(false); })} />
+        {shown != null && <span className="t-meta ml-auto whitespace-nowrap">{shown} {shown === 1 ? "lead" : "leads"}</span>}
       </div>
 
       {/* content */}
@@ -212,9 +164,9 @@ export default function LeadsPage() {
       {active.data && isEmpty && (
         <StateView
           kind="empty"
-          title={filtering ? "Nothing matches" : view === "lost" ? "No lost leads" : "No leads yet"}
-          message={filtering ? "Try a different search or clear the filters." : view === "lost" ? "Leads you close as lost show up here, grouped by reason." : "Add your first lead, or import your Excel sheet."}
-          action={filtering || view === "lost" ? undefined
+          title={filtering ? "Nothing matches" : "No leads yet"}
+          message={filtering ? "Try a different search or clear the filters." : "Add your first lead, or import your Excel sheet."}
+          action={filtering ? undefined
             : <><Button variant="secondary" onClick={() => setImportOpen(true)}><FileUp className="h-4 w-4" /> Import</Button>{addButton}</>}
         />
       )}
@@ -240,8 +192,6 @@ export default function LeadsPage() {
           ))}
         </div>
       )}
-
-      {view === "lost" && board.data && !isEmpty && <LostBoard leads={lostLeads} reasons={actions.meta?.lostReasons} showOwner={manager} />}
 
       {view === "table" && list.data && !isEmpty && (
         <div className="min-h-0 flex-1 overflow-y-auto">

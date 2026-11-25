@@ -1,11 +1,12 @@
 "use client";
-import { CalendarClock, CalendarHeart, Check, FolderPlus, MessageCircle, Phone, PhoneIncoming, Plus, Repeat, Settings2, Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, CalendarHeart, ClipboardCheck, FolderPlus, MessageCircle, Phone, PhoneIncoming, Plus, Repeat, Settings2, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useState } from "react";
 import { toast } from "sonner";
 import { TIER_TONE } from "@/components/clients/client-card";
 import { ContactSheet, ManageClientSheet, OccasionSheet } from "@/components/clients/client-small-sheets";
+import { DeleteRecordDialog } from "@/components/crm/delete-record-dialog";
 import { ClientFollowUpSheet, ScheduleClientSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
 import { ProjectSheet, type ProjectMode } from "@/components/clients/project-sheet";
 import { RepeatSheet } from "@/components/clients/repeat-sheet";
@@ -14,11 +15,12 @@ import { Timeline } from "@/components/crm/timeline";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { StageBadge } from "@/components/ui/stage-badge";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
-import { followUpLabel, formatDate, openWhatsApp, telHref } from "@/lib/format";
+import { followUpLabel, formatDate, formatTime, openWhatsApp, telHref } from "@/lib/format";
 import { inrShort } from "@/lib/money";
 import { isManager } from "@/lib/roles";
 import { cn } from "@/lib/utils";
@@ -67,6 +69,9 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   const [occasion, setOccasion] = useState(false);
   const [contact, setContact] = useState(false);
   const [manage, setManage] = useState(false);
+  const [deletingClient, setDeletingClient] = useState(false);
+  const [removing, setRemoving] = useState<{ id: string; name: string } | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
 
   if (detail.loading && !detail.data) return <div className="flex justify-center py-20"><Spinner /></div>;
   if (!detail.data) return <StateView kind="error" message={detail.error ?? "We could not find this client."} onRetry={reload} action={<Link href="/clients"><Button variant="secondary">Back to clients</Button></Link>} />;
@@ -77,14 +82,28 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   const history = projects.filter((p) => p.stage === "closed_won" || p.stage === "closed_lost");
   const target = { id: client.id, name: client.name };
 
-  async function removeOccasion(oid: string) {
+  async function removeOccasion() {
+    if (!removing) return;
+    setRemoveBusy(true);
     try {
-      await apiClient.delete(`/clients/${id}/occasions/${oid}`);
+      await apiClient.delete(`/clients/${id}/occasions/${removing.id}`);
+      toast.success(`${removing.name} removed`);
+      setRemoving(null);
       reload();
     } catch (e) {
       toast.error(errorMessage(e));
+    } finally {
+      setRemoveBusy(false);
     }
   }
+
+  // Call dials; the outcome form is waiting when the call ends, so the call is on the timeline.
+  const callClient = (who?: { name: string; phone?: string | null }) => {
+    const person = who ?? primary;
+    const h = telHref(person?.phone);
+    if (h) window.location.href = h;
+    setFinishing({ companyId: client.id, companyName: client.name, calling: `${person?.name ?? client.name}${person?.phone ? ` · ${person.phone}` : ""}` });
+  };
 
   const action = (label: string, Icon: typeof Phone, onClick: () => void, primaryStyle = false, disabled = false) => (
     <Button variant={primaryStyle ? "primary" : "secondary"} onClick={onClick} disabled={disabled} className="flex-col gap-1 py-3 text-xs sm:text-sm"><Icon className="h-5 w-5" />{label}</Button>
@@ -108,7 +127,12 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
                 <p className="text-xs text-slate-400">Client since {client.clientSince ? formatDate(client.clientSince) : "—"} · Owner {client.owner?.fullName ?? "—"}</p>
               </div>
             </div>
-            {role && isManager(role) && <Button variant="ghost" className="min-h-9 px-2.5" onClick={() => setManage(true)} aria-label="Manage client"><Settings2 className="h-4 w-4" /></Button>}
+            {role && isManager(role) && (
+              <div className="flex shrink-0 items-center gap-1">
+                <Button variant="ghost" className="min-h-9 px-2.5" onClick={() => setManage(true)} aria-label="Manage client" title="Manage client"><Settings2 className="h-4 w-4" /></Button>
+                <Button variant="ghost" className="min-h-9 px-2.5 text-red-600 hover:bg-red-50" onClick={() => setDeletingClient(true)} aria-label="Delete client" title="Delete client (only if added by mistake)"><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -118,13 +142,12 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
             <Stat label="Last order" value={client.lastOrderAt ? formatDate(client.lastOrderAt) : "—"} />
           </div>
 
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {action("Call", Phone, () => { const h = telHref(primary?.phone); if (h) window.location.href = h; }, true, !primary?.phone)}
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {action("Call", Phone, () => callClient(), true, !primary?.phone)}
             {action("WhatsApp", MessageCircle, () => openWhatsApp(primary?.phone), false, !primary?.phone)}
             {action("New project", FolderPlus, () => setProject("new"))}
-            {action("Requirement", PhoneIncoming, () => setProject("inbound"))}
+            {action("Client enquiry", PhoneIncoming, () => setProject("inbound"))}
             {action("Repeat order", Repeat, () => setRepeat(true), false, !history.some((p) => p.stage === "closed_won"))}
-            {action("Follow-up", CalendarClock, () => setSchedule(true))}
           </div>
         </Card>
 
@@ -146,9 +169,20 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
           )}
         </Card>
 
+        {/* The latest 5 here; the full history is on Activity, filtered to this client. */}
         <Card>
-          <h2 className="mb-3 text-[13px] font-semibold text-slate-700">Timeline</h2>
-          <Timeline items={timeline} />
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <h2 className="text-[13px] font-semibold text-slate-700">Timeline <span className="ml-1 font-normal text-slate-400">latest {Math.min(5, timeline.length)}</span></h2>
+            {timeline.length > 5 && (
+              <Link href={`/activity?client=${id}`} className="rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand-soft">View all activity</Link>
+            )}
+          </div>
+          <Timeline items={timeline.slice(0, 5)} />
+          {timeline.length > 5 && (
+            <Link href={`/activity?client=${id}`} className="mt-3 flex items-center justify-center rounded-xl border border-slate-200 py-2 text-sm font-medium text-slate-600 hover:border-brand/40 hover:bg-brand-soft/40 hover:text-brand">
+              View all {timeline.length >= 100 ? "100+" : timeline.length} activities
+            </Link>
+          )}
         </Card>
       </div>
 
@@ -160,7 +194,13 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
             <button type="button" onClick={() => setOccasion(true)} className="pressable rounded-full p-1.5 text-brand hover:bg-brand-soft" aria-label="Add occasion"><Plus className="h-4 w-4" /></button>
           </div>
           {occasions.length === 0 ? (
-            <p className="text-xs text-slate-400">Add their gifting occasions (Diwali, New Year, company anniversary ...). You will get a call reminder in time to win the order.</p>
+            <div className="space-y-2 rounded-xl bg-amber-50 p-3">
+              <p className="flex items-start gap-2 text-xs font-medium text-amber-900">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />No occasions yet, so no call reminders for this client.
+              </p>
+              <p className="text-xs text-amber-800">Add their gifting occasions (Diwali, New Year, company anniversary ...). You get a call reminder in time to win the order.</p>
+              <Button variant="secondary" onClick={() => setOccasion(true)} className="min-h-8 w-full px-3 py-1 text-xs"><Plus className="h-3.5 w-3.5" />Add occasion</Button>
+            </div>
           ) : occasions.map((o) => (
             <div key={o.id} className="flex items-center justify-between gap-2 text-sm">
               <div className="min-w-0">
@@ -169,7 +209,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
                   {o.nextDate ? `${formatDate(o.nextDate)} · in ${o.daysAway} days` : "Date not in the calendar yet"}
                 </div>
               </div>
-              <button type="button" onClick={() => removeOccasion(o.id)} className="pressable rounded-full p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500" aria-label={`Remove ${o.name}`}><Trash2 className="h-3.5 w-3.5" /></button>
+              <button type="button" onClick={() => setRemoving({ id: o.id, name: o.name })} className="pressable rounded-full p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500" aria-label={`Remove ${o.name}`}><Trash2 className="h-3.5 w-3.5" /></button>
             </div>
           ))}
         </Card>
@@ -179,12 +219,18 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
             <h2 className="text-sm font-semibold text-slate-800">Follow-ups</h2>
             <button type="button" onClick={() => setSchedule(true)} className="pressable rounded-full p-1.5 text-brand hover:bg-brand-soft" aria-label="Schedule follow-up"><Plus className="h-4 w-4" /></button>
           </div>
-          {followups.length === 0 ? <p className="text-xs text-slate-400">No client follow-ups planned.</p> : followups.map((t) => {
+          {followups.length === 0 ? <p className="text-xs text-slate-400">No calls planned. Use + to schedule a check-in.</p> : followups.map((t) => {
             const fu = followUpLabel(t.dueDate);
+            const late = Date.parse(t.dueAt ?? `${t.dueDate}T23:59:59+05:30`) < Date.now();
             return (
               <div key={t.id} className="flex items-center justify-between gap-2">
-                <div className="min-w-0 text-sm"><div className="truncate font-medium text-slate-800">{t.title ?? "Check in"}</div><div className={cn("text-xs", fu.tone)}>{fu.text}</div></div>
-                <Button variant="secondary" className="min-h-8 shrink-0 px-2.5 py-1 text-xs" onClick={() => setFinishing({ taskId: t.id, companyId: client.id, companyName: client.name, title: t.title })}><Check className="h-3.5 w-3.5" /> Done</Button>
+                <div className="min-w-0 text-sm">
+                  <div className="truncate font-medium text-slate-800">{t.title ?? "Check in"}</div>
+                  <div className={cn("text-xs", late ? "font-medium text-red-600" : fu.tone)}>
+                    {t.dueAt ? `${late ? "Missed · " : ""}${formatDate(t.dueAt)}, ${formatTime(t.dueAt).toUpperCase()}` : fu.text}
+                  </div>
+                </div>
+                <Button variant="secondary" className="min-h-8 shrink-0 whitespace-nowrap px-2.5 py-1 text-xs" onClick={() => setFinishing({ taskId: t.id, companyId: client.id, companyName: client.name, title: t.title })}><ClipboardCheck className="h-3.5 w-3.5" /> Log outcome</Button>
               </div>
             );
           })}
@@ -199,7 +245,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
             <div key={c.id} className="flex items-center gap-2.5">
               <Avatar src={c.photoUrl} name={c.name} size="sm" />
               <div className="min-w-0 flex-1 text-sm"><div className="truncate font-medium">{c.name}</div><div className="truncate text-xs text-slate-400">{c.designation ?? c.phone ?? c.email}</div></div>
-              {c.phone && <a href={telHref(c.phone)} className="pressable rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50" aria-label={`Call ${c.name}`}><Phone className="h-4 w-4" /></a>}
+              {c.phone && <button type="button" onClick={() => callClient({ name: c.name, phone: c.phone })} className="pressable rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50" aria-label={`Call ${c.name}`}><Phone className="h-4 w-4" /></button>}
             </div>
           ))}
         </Card>
@@ -218,6 +264,17 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
       <OccasionSheet client={occasion ? target : null} onClose={() => setOccasion(false)} onDone={reload} />
       <ContactSheet client={contact ? target : null} onClose={() => setContact(false)} onDone={reload} />
       <ManageClientSheet client={manage ? client : null} onClose={() => setManage(false)} onDone={reload} />
+      <DeleteRecordDialog open={deletingClient} kind="client" name={client.name} path={`/clients/${client.id}`}
+        onClose={() => setDeletingClient(false)} onDeleted={() => router.push("/clients")} />
+      <DeleteDialog
+        open={!!removing}
+        title={`Remove ${removing?.name ?? "occasion"}?`}
+        message="Call reminders for this occasion will stop. You can add it again later."
+        loading={removeBusy}
+        confirmLabel="Remove"
+        onConfirm={() => void removeOccasion()}
+        onCancel={() => setRemoving(null)}
+      />
     </div>
   );
 }

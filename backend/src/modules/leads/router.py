@@ -93,6 +93,11 @@ async def set_photo(lead_id: str, user: CurrentUserDep, file: UploadFile = File(
     return ok(await run_in_threadpool(service.set_photo, user, lead_id, data), "Photo saved.")
 
 
+@router.delete("/{lead_id}")
+def delete_lead(lead_id: str, user: CurrentUserDep):
+    return ok(service.delete_lead(user, lead_id), "Lead deleted.")
+
+
 @router.delete("/{lead_id}/photo")
 def remove_photo(lead_id: str, user: CurrentUserDep):
     service.remove_photo(user, lead_id)

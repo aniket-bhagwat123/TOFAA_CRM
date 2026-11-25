@@ -17,6 +17,17 @@ def unread(user: CurrentUserDep):
     return ok(service.list_unread(user))
 
 
+@router.get("/center")
+def center(user: CurrentUserDep):
+    return ok(service.center(user))
+
+
+@router.post("/read-all")
+def read_all(user: CurrentUserDep):
+    service.mark_all_read(user)
+    return ok(None)
+
+
 @router.post("/read")
 def mark_read(body: MarkRead, user: CurrentUserDep):
     service.mark_read(user, body.ids)

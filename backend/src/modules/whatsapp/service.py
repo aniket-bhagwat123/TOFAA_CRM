@@ -18,6 +18,7 @@ from src.core.errors import AppError, ForbiddenError, NotFoundError
 from src.core.keys import phone_key
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile, Role
 from src.modules.auth.service import normalize_identifier
 from src.modules.leads import service as leads
@@ -46,17 +47,16 @@ def _last_inbound(lead_id: str) -> datetime | None:
     return datetime.fromisoformat(rows[0]["created_at"]) if rows else None
 
 
-def _send_via_api(to_digits: str, body: SendMessage) -> str:
-    if body.template:
-        payload = {"type": "template", "template": {"name": body.template, "language": {"code": "en"}}}
-    else:
-        payload = {"type": "text", "text": {"body": body.body}}
+def _auth() -> dict:
+    return {"Authorization": f"Bearer {settings.WHATSAPP_TOKEN}"}
+
+
+def _post_message(to_digits: str, payload: dict) -> str:
+    """One message through the Cloud API. Returns WhatsApp's message id."""
     try:
         res = httpx.post(
-            f"{GRAPH}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages",
-            headers={"Authorization": f"Bearer {settings.WHATSAPP_TOKEN}"},
-            json={"messaging_product": "whatsapp", "to": to_digits, **payload},
-            timeout=15,
+            f"{GRAPH}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages", headers=_auth(),
+            json={"messaging_product": "whatsapp", "to": to_digits, **payload}, timeout=20,
         )
     except httpx.HTTPError as exc:
         raise AppError("Could not reach WhatsApp. Try again.", status_code=502) from exc
@@ -64,6 +64,69 @@ def _send_via_api(to_digits: str, body: SendMessage) -> str:
         log.warning("whatsapp send failed: %s %s", res.status_code, res.text[:300])
         raise AppError("WhatsApp rejected the message. Check the number or use an approved template.", status_code=502)
     return (res.json().get("messages") or [{}])[0].get("id", "")
+
+
+def _send_via_api(to_digits: str, body: SendMessage) -> str:
+    if body.template:
+        payload = {"type": "template", "template": {"name": body.template, "language": {"code": settings.WHATSAPP_TEMPLATE_LANGUAGE or "en"}}}
+    else:
+        payload = {"type": "text", "text": {"body": body.body}}
+    return _post_message(to_digits, payload)
+
+
+# --- a message with a "View quotation" button -------------------------------------------------------------------
+
+LINK_BUTTON = "View quotation"
+
+
+def quotation_text(name: str, number: str, company: str, total: str) -> str:
+    """The quotation message. The same words as the approved template, so the client sees one message either way."""
+    return (
+        f"Hello {name},\n\nThank you for your interest in {settings.COMPANY_NAME}. Your quotation {number} for {company} is ready.\n"
+        f"Total: {total}\n\nTap the button below to view or download it."
+    )
+
+
+def link_payload(text: str, link: str, *, in_window: bool, template: str, language: str, values: list[str], base: str) -> dict:
+    """The message with a button that opens the link.
+    Inside the 24-hour window: an interactive message (any text, any link) with a "View quotation" button.
+    Outside it Meta only allows an approved template: the same text from the body values, and the template's URL button
+    ("https://<crm>/s/{{1}}") gets the link's code."""
+    if in_window:
+        return {"type": "interactive", "interactive": {
+            "type": "cta_url", "body": {"text": text[:1024]},
+            "action": {"name": "cta_url", "parameters": {"display_text": LINK_BUTTON, "url": link}},
+        }}
+    code = link[len(base):] if base and link.startswith(base) else ""
+    if not template or not code:
+        raise AppError("Outside the 24-hour window WhatsApp needs the approved quotation template.", {"code": "template_required"}, 422)
+    return {"type": "template", "template": {"name": template, "language": {"code": language or "en"}, "components": [
+        {"type": "body", "parameters": [{"type": "text", "text": (v or "-")[:1000]} for v in values]},
+        {"type": "button", "sub_type": "url", "index": "0", "parameters": [{"type": "text", "text": code}]},
+    ]}}
+
+
+def send_link_message(user: Profile, lead_id: str, *, text: str, link: str, values: list[str], base: str) -> dict:
+    """Send the message with its "View quotation" button from the company number. Saved to the lead's history.
+    Raises AppError(code=template_required) when the window is closed and the template is not set up, so the caller
+    can fall back to click-to-chat."""
+    lead = leads.get_lead_row(user, lead_id)
+    phone = (lead.get("contact") or {}).get("phone")
+    if not phone:
+        raise AppError("This contact has no phone number.", status_code=422)
+    to = _digits(phone)
+    last = _last_inbound(lead_id)
+    in_window = bool(last and now_ist() - last <= timedelta(hours=24))
+    template = settings.WHATSAPP_QUOTATION_TEMPLATE
+    payload = link_payload(text, link, in_window=in_window, template=template, language=settings.WHATSAPP_TEMPLATE_LANGUAGE, values=values, base=base)
+    provider_id = _post_message(to, payload)
+    get_service_client().table("whatsapp_messages").insert(
+        {"lead_id": lead_id, "company_id": lead["company_id"], "direction": "out", "mode": "api", "phone": to,
+         "body": f"{text}\n[{LINK_BUTTON}: {link}]", "template": None if in_window else template, "provider_id": provider_id,
+         "sent_by": user.id, "status": "sent"}
+    ).execute()
+    add_activity(lead_id, user.id, "whatsapp", outcome="sent", note=text, meta={"direction": "out", "mode": "api", "link": link})
+    return {"mode": "api", "url": None, "button": True}
 
 
 def send(user: Profile, lead_id: str, body: SendMessage, *, force_click: bool = False) -> dict:
@@ -150,7 +213,7 @@ def _store_inbound(msg: dict) -> None:
     lead = None
     if contacts:
         rows = (
-            db.table("leads").select("*").in_("contact_id", [c["id"] for c in contacts])
+            live(db.table("leads").select("*")).in_("contact_id", [c["id"] for c in contacts])
             .not_.in_("stage", list(CLOSED)).order("last_activity_at", desc=True).limit(1).execute().data
         )
         lead = rows[0] if rows else None

@@ -110,7 +110,7 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
         outcome,
         note: note.trim() || null,
         nextFollowUp: showDate && date ? date : null,
-        nextFollowUpTime: showDate && date && outcome === "call_back_later" && time ? time : null,
+        nextFollowUpTime: showDate && date && time ? time : null, // empty: the app uses 10:00 AM
         taskId: target.taskId ?? null,
         newPhone: swapping ? normalizePhone10(newPhone) : null,
         newName: swapping ? newName.trim() || null : null,
@@ -147,8 +147,14 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
       : "Save";
 
   return (
-    <Sheet open={!!target} title="Call outcome" subtitle={target?.name} icon={Phone} tone="emerald" onClose={close}>
+    <Sheet open={!!target} title="Log outcome" subtitle={target?.name} icon={Phone} tone="emerald" onClose={close}>
       <div className="space-y-4">
+        {target?.calling && (
+          <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+            <Phone className="h-4 w-4 shrink-0 animate-pulse" aria-hidden="true" />
+            <span>Calling <b className="font-semibold">{target.calling}</b>… When the call ends, pick what happened.</span>
+          </p>
+        )}
         <div>
           <span className="mb-1.5 block text-sm font-medium text-slate-700">What happened?<span className="ml-0.5 font-semibold text-red-600" aria-hidden="true">*</span></span>
           <div className="grid grid-cols-2 gap-2">
@@ -235,7 +241,9 @@ export function QuickLogSheet({ target, lostReasons = [], rules, onClose, onDone
             error={errors.nextFollowUp}
           />
         )}
-        {outcome === "call_back_later" && <TimePicker label="Call back at (optional)" value={time} onChange={setTime} placeholder="Any time" />}
+        {showDate && (
+          <TimePicker label={outcome === "call_back_later" ? "Call back at" : outcome === "not_reachable" ? "Call again at" : "Time"} value={time} onChange={setTime} placeholder="10:00 AM (default)" />
+        )}
         <VoiceTextarea label="Note (optional)" value={note} onChange={setNote} rows={2} placeholder="Write a note" />
         <Button onClick={save} loading={busy} variant={saveLabel === "Save and close as lost" ? "danger" : "primary"} className="w-full">{saveLabel}</Button>
       </div>

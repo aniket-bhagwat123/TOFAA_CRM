@@ -49,7 +49,8 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
     // Dial first; the outcome sheet is waiting when the executive comes back from the call.
     const href = telHref(phone);
     if (href) window.location.href = href;
-    setCall(t);
+    const who = (t.name.split(" · ")[1] ?? t.contactName ?? t.name).trim();
+    setCall({ ...t, calling: phone ? `${who} · ${phone}` : who });
   }, []);
 
   // Two numbers on file (after a "Wrong number" call gave a new one): ask which to dial.

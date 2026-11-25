@@ -7,6 +7,7 @@ import { CompanyDashboard, type CompanyData } from "@/components/dashboard/compa
 import { ExecutiveDashboard, type ExecutiveData } from "@/components/dashboard/executive-dashboard";
 import { FinanceDashboard, type FinanceData } from "@/components/dashboard/finance-dashboard";
 import { KamDashboard, type KamData } from "@/components/dashboard/kam-dashboard";
+import { TodayPanel } from "@/components/dashboard/today-panel";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Spinner } from "@/components/ui/spinner";
@@ -17,9 +18,9 @@ import { useAppSelector } from "@/store/hooks";
 type DashboardData = { role: string } & Partial<CompanyData & ExecutiveData & FinanceData & KamData>;
 
 const INTRO: Record<string, string> = {
-  sales_executive: "Your pipeline, target, follow-ups and quotations at a glance.",
+  sales_executive: "",
   sales_manager: "Pipeline, target and what needs attention across the company.",
-  admin: "The whole business: pipeline, people, payments and orders.",
+  admin: "",
   finance: "Payments waiting, received this month, and the ERP connection.",
   kam: "Your accounts: revenue, occasions coming up, orders and follow-ups.",
 };
@@ -34,7 +35,7 @@ export default function DashboardPage() {
   const role = user?.role;
 
   return (
-    <div className="space-y-5">
+    <div className={INTRO[role ?? ""] === "" ? "" : "space-y-5"}>
       <PageHeader
         title="Dashboard"
         description={role ? INTRO[role] : undefined}
@@ -50,7 +51,12 @@ export default function DashboardPage() {
       {data.loading && !d && <div className="flex justify-center py-12"><Spinner /></div>}
       {data.error && !d && <StateView kind="error" message={data.error} onRetry={() => void data.reload()} />}
       {d && (role === "admin" || role === "sales_manager") && <CompanyDashboard d={d as CompanyData} admin={role === "admin"} />}
-      {d && role === "sales_executive" && <ExecutiveDashboard d={d as ExecutiveData} />}
+      {role === "sales_executive" && (
+        <div className="space-y-5">
+          <TodayPanel />
+          {d && <ExecutiveDashboard d={d as ExecutiveData} />}
+        </div>
+      )}
       {d && role === "finance" && <FinanceDashboard d={d as FinanceData} />}
       {d && role === "kam" && <KamDashboard d={d as KamData} />}
       {role === "sales_manager" && (

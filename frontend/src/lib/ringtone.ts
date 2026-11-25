@@ -1,6 +1,6 @@
 /**
- * A phone-style ring for follow-up reminders, made with the Web Audio API (no sound file).
- * Pattern: ring-ring (two short bursts of a 440 + 480 Hz tone), pause, repeat, until stop().
+ * A reminder chime for follow-up reminders, made with the Web Audio API (no sound file).
+ * Pattern: a soft three-note "ding-ding-ding", pause, repeat, until stop().
  *
  * Browsers only allow sound after the user has clicked or tapped the page once. unlockAudio() is called on the
  * first tap anywhere in the app; before that a reminder still shows, silently.
@@ -9,7 +9,7 @@ let ctx: AudioContext | null = null;
 let timer: ReturnType<typeof setInterval> | null = null;
 let master: GainNode | null = null;
 
-const RING_EVERY_MS = 3000;
+const RING_EVERY_MS = 4000; // the chime repeats every 4 seconds until the reminder is closed
 
 function context(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -27,25 +27,35 @@ export function unlockAudio(): void {
   if (c && c.state === "suspended") void c.resume();
 }
 
-/** One "ring-ring": two 0.4 s bursts, 0.2 s apart. */
+/** Three rising notes (C6 -> E6 -> G6), 0.18 s apart. */
+const NOTES = [1046.5, 1318.5, 1568.0];
+const NOTE_GAP = 0.18;
+const NOTE_LENGTH = 0.9; // seconds each note takes to fade out
+
+/**
+ * One reminder chime: a soft, bell-like "ding-ding-ding". Each note is a sine with a quieter overtone, a quick attack
+ * and a long fade, so it sounds like a notification, not a phone call.
+ */
 function burst(c: AudioContext, out: GainNode) {
   const t0 = c.currentTime + 0.02;
-  for (const start of [t0, t0 + 0.6]) {
+  NOTES.forEach((hz, i) => {
+    const start = t0 + i * NOTE_GAP;
     const gain = c.createGain();
-    gain.gain.setValueAtTime(0, start);
-    gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
-    gain.gain.setValueAtTime(0.18, start + 0.38);
-    gain.gain.linearRampToValueAtTime(0, start + 0.4);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(0.22, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + NOTE_LENGTH);
     gain.connect(out);
-    for (const hz of [440, 480]) {
+    for (const [mult, level] of [[1, 1], [2, 0.25]] as const) { // the note and a soft octave overtone (the "bell")
       const osc = c.createOscillator();
+      const g = c.createGain();
       osc.type = "sine";
-      osc.frequency.value = hz;
-      osc.connect(gain);
+      osc.frequency.value = hz * mult;
+      g.gain.value = level;
+      osc.connect(g).connect(gain);
       osc.start(start);
-      osc.stop(start + 0.42);
+      osc.stop(start + NOTE_LENGTH + 0.05);
     }
-  }
+  });
 }
 
 export function isRinging(): boolean {

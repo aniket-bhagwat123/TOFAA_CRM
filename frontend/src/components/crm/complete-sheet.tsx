@@ -40,7 +40,7 @@ export function CompleteSheet({ task, onClose, onDone }: Props) {
   }
 
   return (
-    <Sheet open={!!task} title="Complete task" subtitle={task?.name} icon={CheckCircle2} tone="emerald" onClose={onClose}>
+    <Sheet open={!!task} title="Log outcome" subtitle={task?.name} icon={CheckCircle2} tone="emerald" onClose={onClose}>
       <div className="space-y-4">
         <div>
           <VoiceTextarea label="What happened?" value={note} onChange={(v) => { setNote(v); setNoteErr(undefined); }} rows={2} placeholder="Write the outcome" />

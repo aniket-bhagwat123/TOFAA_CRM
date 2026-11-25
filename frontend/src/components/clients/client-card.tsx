@@ -1,8 +1,8 @@
 "use client";
-import { CalendarHeart, FolderKanban } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarHeart, FolderKanban } from "lucide-react";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatTime } from "@/lib/format";
 import { inrShort } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { ClientSummary } from "@/types/crm";
@@ -16,6 +16,10 @@ type Props = { client: ClientSummary; showOwner?: boolean; onCall: () => void; o
 export function ClientCard({ client, showOwner, onCall, onWhatsApp }: Props) {
   const occ = client.nextOccasion;
   const soon = occ && occ.daysAway <= 45;
+  const noOccasions = client.occasionCount === 0;
+  const next = client.nextCheckIn;
+  const nextAt = next ? Date.parse(next.dueAt ?? `${next.dueDate}T23:59:59+05:30`) : 0;
+  const late = !!next && nextAt < Date.now();
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card transition-all hover:-translate-y-0.5 hover:shadow-float">
       <Link href={`/clients/${client.id}`} className="flex flex-1 flex-col gap-3.5 p-4">
@@ -38,9 +42,23 @@ export function ClientCard({ client, showOwner, onCall, onWhatsApp }: Props) {
         </div>
 
         <div className="space-y-1.5 text-[13px]">
-          <div className={cn("flex items-center gap-2", soon ? "font-medium text-indigo-700" : "text-slate-600")}>
-            <CalendarHeart className="h-3.5 w-3.5 shrink-0" />
-            {occ ? `${occ.name} · ${formatDate(occ.date)} (${occ.daysAway === 0 ? "today" : `in ${occ.daysAway} days`})` : "No occasion added yet"}
+          {noOccasions ? (
+            <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-2 py-1.5 font-medium text-amber-800">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />No occasions: add them to get call reminders
+            </div>
+          ) : (
+            <div className={cn("flex items-center gap-2", soon ? "font-medium text-indigo-700" : "text-slate-600")}>
+              <CalendarHeart className="h-3.5 w-3.5 shrink-0" />
+              {occ ? `${occ.name} · ${formatDate(occ.date)} (${occ.daysAway === 0 ? "today" : `in ${occ.daysAway} days`})` : "Occasion date not in the calendar yet"}
+            </div>
+          )}
+          <div className={cn("flex items-center gap-2", late ? "font-medium text-red-600" : "text-slate-600")} title={next?.title ?? undefined}>
+            <CalendarClock className={cn("h-3.5 w-3.5 shrink-0", late ? "" : "text-slate-400")} />
+            <span className="truncate">
+              {next
+                ? `${late ? "Overdue" : "Next"}: ${formatDate(next.dueAt ?? next.dueDate)}${next.dueAt ? `, ${formatTime(next.dueAt).toUpperCase()}` : ""}${next.title ? ` · ${next.title}` : ""}`
+                : <span className="text-slate-400">No call planned</span>}
+            </span>
           </div>
           <div className="flex items-center gap-2 text-slate-600"><FolderKanban className="h-3.5 w-3.5 shrink-0 text-slate-400" />{client.lastOrderAt ? `Last order ${formatDate(client.lastOrderAt)}` : "No order yet"}</div>
         </div>

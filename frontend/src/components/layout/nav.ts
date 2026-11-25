@@ -1,10 +1,9 @@
-import { BadgeCheck, BarChart3, Target, Building2, CalendarCheck, CalendarClock, FileText, History, KanbanSquare, LayoutDashboard, PackageCheck, Settings, User, Users, Wallet } from "lucide-react";
+import { BadgeCheck, BarChart3, Target, Building2, CalendarClock, FileText, History, KanbanSquare, LayoutDashboard, PackageCheck, Settings, User, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/types/api";
 
 export type NavItem = { href: string; label: string; icon: LucideIcon };
 
-const today = { href: "/today", label: "Today", icon: CalendarCheck };
 const leads = { href: "/leads", label: "Leads", icon: KanbanSquare };
 const clients = { href: "/clients", label: "Clients", icon: Building2 };
 const followUps = { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock };
@@ -31,7 +30,7 @@ export const profileItem = { href: "/profile", label: "Profile", icon: User };
 export function navFor(role: Role): NavItem[] {
   switch (role) {
     case "sales_executive":
-      return [dashboard, today, leads, followUps, quotations, myTarget];
+      return [dashboard, leads, followUps, quotations, myTarget]; // "Today" is the top of their Dashboard
     case "sales_manager":
       return [dashboard, leads, followUps, quotations, approvals, reports];
     case "admin":

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AddClientSheet } from "@/components/clients/add-client-sheet";
 import { CampaignModal } from "@/components/clients/campaign-modal";
 import { ClientCard } from "@/components/clients/client-card";
+import { ClientFollowUpSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
@@ -18,7 +19,7 @@ import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import type { AssignableUser, ClientSummary } from "@/types/crm";
 
-const select = "h-10 w-full shrink-0 truncate rounded-xl border border-slate-300/80 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15 sm:w-36";
+const select = "h-10 w-full shrink-0 truncate rounded-xl border border-slate-300/80 bg-white px-3 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-brand/15 sm:w-auto";
 
 export default function ClientsPage() {
   const router = useRouter();
@@ -28,16 +29,23 @@ export default function ClientsPage() {
   const [tier, setTier] = useState("");
   const [status, setStatus] = useState("");
   const [owner, setOwner] = useState("");
-  const [soon, setSoon] = useState(false);
+  const [occasions, setOccasions] = useState(""); // "" | "soon" | "none"
+  const [calling, setCalling] = useState<ClientTaskTarget | null>(null);
   const [adding, setAdding] = useState(false);
   const [campaign, setCampaign] = useState(false);
   const q = useDebounce(search, 300);
 
-  const list = useApi<ClientSummary[]>("/clients", { search: q, tier, status, ownerId: owner, occasionSoon: soon || undefined });
+  const list = useApi<ClientSummary[]>("/clients", { search: q, tier, status, ownerId: owner, occasionSoon: occasions === "soon" || undefined, noOccasions: occasions === "none" || undefined });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
-  const filtering = !!(q || tier || status || owner || soon);
+  const filtering = !!(q || tier || status || owner || occasions);
 
-  const call = (c: ClientSummary) => { const href = telHref(c.primaryContact?.phone); if (href) window.location.href = href; };
+  // Call dials, and the outcome form is waiting when the call ends, so every client call is recorded.
+  const call = (c: ClientSummary) => {
+    const phone = c.primaryContact?.phone;
+    const href = telHref(phone);
+    if (href) window.location.href = href;
+    setCalling({ companyId: c.id, companyName: c.name, calling: `${c.primaryContact?.name ?? c.name}${phone ? ` · ${phone}` : ""}` });
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -59,9 +67,11 @@ export default function ClientsPage() {
             {people.data.map((u) => <option key={u.id} value={u.id}>{u.fullName}</option>)}
           </select>
         )}
-        <button type="button" onClick={() => setSoon((s) => !s)} aria-pressed={soon} className={cn("pressable h-10 shrink-0 rounded-xl border px-4 text-sm font-medium", soon ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-300/80 bg-white text-slate-600")}>
-          Occasion soon
-        </button>
+        <select className={cn(select, occasions === "none" && "border-amber-300 bg-amber-50 text-amber-800")} value={occasions} onChange={(e) => setOccasions(e.target.value)} aria-label="Occasions">
+          <option value="">All occasions</option>
+          <option value="soon">Occasion coming soon</option>
+          <option value="none">No occasions added</option>
+        </select>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {manager && <Button variant="secondary" onClick={() => setCampaign(true)}><Megaphone className="h-4 w-4" /> Campaign</Button>}
           <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add client</Button>
@@ -90,6 +100,7 @@ export default function ClientsPage() {
 
       <AddClientSheet open={adding} onClose={() => setAdding(false)} onDone={(id) => router.push(`/clients/${id}`)} />
       <CampaignModal open={campaign} onClose={() => setCampaign(false)} />
+      <ClientFollowUpSheet target={calling} onClose={() => setCalling(null)} onDone={(pid) => (pid ? router.push(`/projects/${pid}`) : void list.reload())} />
     </div>
   );
 }

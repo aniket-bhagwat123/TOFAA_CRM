@@ -15,6 +15,7 @@ from src.core.dates import IST, today_ist
 from src.core.errors import ForbiddenError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile, Role
 from src.modules.leads.stages import CLOSED
 from src.modules.leads.value import decimal_value
@@ -71,7 +72,7 @@ def _executive(user: Profile) -> dict:
     now = datetime.now(IST)
     month_start = datetime.combine(today_ist().replace(day=1), time.min, tzinfo=IST).isoformat()
     leads, quotes, meetings = par(
-        lambda: db.table("leads").select("id,stage,last_call_outcome,value_band,estimate_amount,quote_amount,paid_amount")
+        lambda: live(db.table("leads").select("id,stage,last_call_outcome,value_band,estimate_amount,quote_amount,paid_amount"))
         .eq("owner_id", user.id).not_.in_("stage", list(CLOSED)).limit(2000).execute().data,
         lambda: _safe(lambda: db.table("quotations").select("id,lead_id,version,status,total,created_at,sent_at,lead:leads!inner(owner_id,company:companies(name))")
                       .eq("lead.owner_id", user.id).order("created_at", desc=True).limit(500).execute().data, []),

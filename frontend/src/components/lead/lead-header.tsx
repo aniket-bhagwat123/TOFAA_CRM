@@ -1,5 +1,5 @@
 "use client";
-import { Bell, CalendarPlus, History, Mail, MessageCircle, Pencil, Phone, StickyNote, UserCog } from "lucide-react";
+import { Bell, CalendarPlus, History, Mail, MessageCircle, Pencil, Phone, StickyNote, Trash2, UserCog } from "lucide-react";
 import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import { StageIcon } from "./stage-icon";
 type Props = {
   lead: Lead;
   canReassign: boolean;
+  canDelete?: boolean; // managers, admins, and the executive who owns it
+  onDelete?: () => void;
   onCall: () => void;
   onWhatsApp: () => void;
   onMeeting: () => void;
@@ -30,13 +32,14 @@ const TONE = {
   activity: "bg-sky-50 text-sky-600 hover:bg-sky-100",
   edit: "bg-violet-50 text-brand hover:bg-violet-100",
   reassign: "bg-emerald-50 text-emerald-600 hover:bg-emerald-100",
+  remove: "bg-red-50 text-red-600 hover:bg-red-100",
 };
 
 /**
  * Who this is, how to reach them, what is next, and the actions. Quiet by design: one filled button (Call),
  * grey fills for the rest, facts as small label/value pairs instead of coloured panels.
  */
-export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, onReminder, onEdit, onReassign, onNote }: Props) {
+export function LeadHeader({ lead, canReassign, canDelete, onCall, onWhatsApp, onMeeting, onReminder, onEdit, onReassign, onNote, onDelete }: Props) {
   const closed = lead.stage === "closed_won" || lead.stage === "closed_lost";
   const fu = followUpLabel(lead.nextFollowUp);
   const role = useAppSelector((st) => st.auth.session?.profile.role); // executives never see Activity
@@ -89,6 +92,9 @@ export function LeadHeader({ lead, canReassign, onCall, onWhatsApp, onMeeting, o
           <button type="button" onClick={onEdit} aria-label="Edit details" title="Edit details" className={cn(ICON, TONE.edit)}><Pencil className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Edit</span></button>
           {canReassign && (
             <button type="button" onClick={onReassign} aria-label="Reassign" title="Reassign" className={cn(ICON, TONE.reassign)}><UserCog className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Reassign</span></button>
+          )}
+          {canDelete && onDelete && lead.stage !== "closed_won" && (
+            <button type="button" onClick={onDelete} aria-label="Delete" title="Delete (only if added by mistake)" className={cn(ICON, TONE.remove)}><Trash2 className="h-4 w-4 shrink-0" /><span className="hidden sm:inline">Delete</span></button>
           )}
         </div>
       </div>

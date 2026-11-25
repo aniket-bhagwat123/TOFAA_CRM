@@ -12,29 +12,39 @@ type Props = {
   value: string; // YYYY-MM-DD or ""
   onChange: (iso: string) => void;
   min?: string;
+  max?: string; // the last date that can be picked (for example today, for a report range)
   error?: string;
   required?: boolean;
   compact?: boolean; // a small button (used next to the quick picks) instead of a full-width field
   placeholder?: string;
+  size?: "md" | "sm"; // sm: a 40px field that fits a filter row
+  ariaLabel?: string; // the field's name when there is no visible label
 };
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 /** A calendar that opens under the field. Replaces the browser's own date control. */
-export function DatePicker({ label, value, onChange, min, error, required, compact, placeholder = "Select date" }: Props) {
+export function DatePicker({ label, value, onChange, min, max, error, required, compact, placeholder = "Select date", size = "md", ariaLabel }: Props) {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const selected = parseYmd(value);
   const today = parseYmd(todayIso())!;
   const [view, setView] = useState(() => ({ y: (selected ?? today).y, m: (selected ?? today).m }));
   const minYmd = parseYmd(min);
+  const maxYmd = parseYmd(max);
 
   const shift = (delta: number) =>
     setView(({ y, m }) => {
       const n = y * 12 + (m - 1) + delta;
       return { y: Math.floor(n / 12), m: (n % 12) + 1 };
     });
-  const disabled = (d: number) => !!minYmd && toIso({ ...view, d }) < toIso(minYmd);
+  const disabled = (d: number) => {
+    const iso = toIso({ ...view, d });
+    return (!!minYmd && iso < toIso(minYmd)) || (!!maxYmd && iso > toIso(maxYmd));
+  };
+  // no paging into months where nothing can be picked
+  const canBack = !minYmd || view.y * 12 + view.m > minYmd.y * 12 + minYmd.m;
+  const canNext = !maxYmd || view.y * 12 + view.m < maxYmd.y * 12 + maxYmd.m;
   const pick = (iso: string) => { onChange(iso); setOpen(false); };
 
   const lead = mondayIndex(view.y, view.m);
@@ -48,9 +58,10 @@ export function DatePicker({ label, value, onChange, min, error, required, compa
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-invalid={!!error || undefined}
+      aria-label={ariaLabel ? `${ariaLabel}: ${value ? longDate(value) : "not set"}` : undefined}
       className={cn(
         "pressable inline-flex items-center gap-2 border bg-white text-left outline-none transition-shadow focus-visible:ring-4 focus-visible:ring-brand/15",
-        compact ? "h-8 rounded-full px-3 text-xs font-medium" : "h-11 w-full rounded-xl px-3.5 text-base sm:text-sm",
+        compact ? "h-8 rounded-full px-3 text-xs font-medium" : size === "sm" ? "h-10 rounded-xl px-3 text-sm" : "h-11 w-full rounded-xl px-3.5 text-base sm:text-sm",
         error ? "border-red-400 ring-4 ring-red-100" : open ? "border-brand ring-4 ring-brand/15" : "border-slate-300/80 hover:border-slate-400",
         compact && value && "border-brand bg-brand-soft text-brand",
       )}
@@ -73,9 +84,9 @@ export function DatePicker({ label, value, onChange, min, error, required, compa
 
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} width={296} label="Choose a date">
         <div className="mb-2 flex items-center justify-between">
-          <button type="button" onClick={() => shift(-1)} aria-label="Previous month" className="pressable rounded-full p-1.5 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-4 w-4" /></button>
+          <button type="button" onClick={() => shift(-1)} disabled={!canBack} aria-label="Previous month" className="pressable rounded-full p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
           <div className="text-sm font-semibold tracking-tight">{MONTHS[view.m - 1]} {view.y}</div>
-          <button type="button" onClick={() => shift(1)} aria-label="Next month" className="pressable rounded-full p-1.5 text-slate-500 hover:bg-slate-100"><ChevronRight className="h-4 w-4" /></button>
+          <button type="button" onClick={() => shift(1)} disabled={!canNext} aria-label="Next month" className="pressable rounded-full p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
         </div>
         <div className="grid grid-cols-7 text-center text-[11px] font-medium text-slate-400">
           {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
@@ -108,7 +119,7 @@ export function DatePicker({ label, value, onChange, min, error, required, compa
           })}
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-          <button type="button" onClick={() => { const t = toIso(today); if (!min || t >= min) pick(t); }} className="font-medium text-brand hover:underline">Today</button>
+          <button type="button" onClick={() => { const t = toIso(today); if ((!min || t >= min) && (!max || t <= max)) pick(t); }} className="font-medium text-brand hover:underline">Today</button>
           {value && !required && <button type="button" onClick={() => pick("")} className="text-slate-500 hover:underline">Clear</button>}
         </div>
       </Popover>

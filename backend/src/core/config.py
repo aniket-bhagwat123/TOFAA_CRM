@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     WHATSAPP_VERIFY_TOKEN: str = ""
     WHATSAPP_APP_SECRET: str = ""
     WHATSAPP_COST_PER_CONVERSATION: float = 0.8  # INR estimate for the admin usage view
+    # The quotation message with a "View quotation" button. Inside the 24-hour window no template is needed. Outside it
+    # Meta needs an approved template: 4 body values (contact name, quotation number, company, total) and one
+    # "Visit website" button with the dynamic URL https://<FRONTEND_URL>/s/{{1}}.
+    WHATSAPP_QUOTATION_TEMPLATE: str = ""
+    WHATSAPP_TEMPLATE_LANGUAGE: str = "en"
 
     # Phase 2
     COMPANY_NAME: str = "Tofaa India"  # printed on quotations

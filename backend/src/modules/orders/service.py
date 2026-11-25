@@ -11,6 +11,7 @@ from src.core.errors import AppError, ForbiddenError, NotFoundError
 from src.core.pagination import PageParams, page_meta
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
+from src.core.soft_delete import live
 from src.modules.auth.schemas import Profile, Role
 from src.modules.leads import service as leads
 
@@ -29,7 +30,7 @@ def _missing(exc: Exception) -> bool:
 
 def _kam_companies(user: Profile) -> list[str]:
     """The client accounts a KAM looks after."""
-    rows = get_service_client().table("companies").select("id").eq("account_owner_id", user.id).limit(5000).execute().data
+    rows = live(get_service_client().table("companies").select("id"), "companies").eq("account_owner_id", user.id).limit(5000).execute().data
     return [r["id"] for r in rows] or [NOWHERE]
 
 

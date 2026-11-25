@@ -1,5 +1,5 @@
 "use client";
-import { AlertTriangle, CheckCircle2, Columns3, FolderKanban, FolderPlus, Table2, Wallet, X } from "lucide-react";
+import { AlertTriangle, CheckCircle2, FolderKanban, FolderPlus, Wallet, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BoardCard } from "@/components/crm/board-card";
@@ -9,11 +9,11 @@ import { useLeadActions } from "@/components/crm/use-lead-actions";
 import { NewProjectFlow } from "@/components/projects/new-project";
 import { ProjectTable } from "@/components/projects/project-table";
 import { Button } from "@/components/ui/button";
+import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
 import { StateView } from "@/components/ui/state-view";
-import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { STAGE_LABEL } from "@/lib/format";
@@ -159,15 +159,7 @@ export default function ProjectsPage() {
         </div>
         <div className="flex items-center gap-2">
           {status === "active" && (
-            <div className="flex h-10 items-center gap-0.5 rounded-xl border border-slate-300/80 bg-white p-1" role="radiogroup" aria-label="Layout">
-              {([["board", "Board view", Columns3], ["table", "Table view", Table2]] as const).map(([v, label, Icon]) => (
-                <Tooltip key={v} label={label}>
-                  <button type="button" role="radio" aria-checked={layout === v} aria-label={label} onClick={() => chooseLayout(v)} className={cn("pressable flex h-8 w-8 items-center justify-center rounded-lg", layout === v ? "bg-brand-soft text-brand" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800")}>
-                    <Icon className="h-4 w-4" />
-                  </button>
-                </Tooltip>
-              ))}
-            </div>
+            <ViewToggle value={layout} onChange={chooseLayout} options={BOARD_TABLE} />
           )}
           <Button onClick={() => setCreating(true)}><FolderPlus className="h-4 w-4" /> New project</Button>
         </div>

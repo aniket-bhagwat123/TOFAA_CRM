@@ -12,13 +12,16 @@ import { apiClient, errorMessage } from "@/services/api-client";
 import { DateChips } from "../crm/date-chips";
 import { VoiceTextarea } from "../crm/voice-textarea";
 
-export type ClientTaskTarget = { taskId: string; companyId: string; companyName: string; title?: string | null };
+/** taskId: finish that follow-up. Without one (a call from the client page or list), the call is recorded and it
+ * finishes the client's open call if there is one. calling: shown while the number is being dialled. */
+export type ClientTaskTarget = { taskId?: string; companyId: string; companyName: string; title?: string | null; calling?: string };
 
 const OUTCOMES = [
+  // The same words as a lead's call outcome, so a client call and a deal call read alike.
+  { key: "no_answer", label: "Not reachable", hint: "Try again on a date" },
   { key: "interested", label: "Interested", hint: "Create a project now" },
-  { key: "not_now", label: "Not this time", hint: "Close this call" },
-  { key: "no_answer", label: "No answer", hint: "Try again on a date" },
-  { key: "done", label: "Done", hint: "A check-in, nothing to sell" },
+  { key: "not_now", label: "Not interested", hint: "Nothing needed this time" },
+  { key: "done", label: "Check-in done", hint: "Spoke to them, nothing to sell" },
 ] as const;
 
 /** "Diwali on 29 Oct: ask about gifting" -> "Diwali gifting 2027" as a starting project name. */
@@ -51,7 +54,8 @@ export function ClientFollowUpSheet({ target, onClose, onDone }: { target: Clien
     if (Object.keys(e).length) return;
     setBusy(true);
     try {
-      const res = await apiClient.post<{ projectId?: string | null }>(`/clients/${target.companyId}/followups/${target.taskId}/complete`, {
+      const url = target.taskId ? `/clients/${target.companyId}/followups/${target.taskId}/complete` : `/clients/${target.companyId}/calls`;
+      const res = await apiClient.post<{ projectId?: string | null }>(url, {
         outcome, note: note.trim() || null, nextFollowUp: next || null, projectTitle: outcome === "interested" ? project.trim() : null,
       });
       toast.success(outcome === "interested" ? "Project created" : "Saved");
@@ -66,8 +70,14 @@ export function ClientFollowUpSheet({ target, onClose, onDone }: { target: Clien
   }
 
   return (
-    <Sheet open={!!target} title={target?.title ?? "Client follow-up"} subtitle={target?.companyName} icon={PhoneCall} tone="emerald" onClose={onClose}>
+    <Sheet open={!!target} title="Log outcome" subtitle={target ? `${target.companyName}${target.title ? ` · ${target.title}` : ""}` : undefined} icon={PhoneCall} tone="emerald" onClose={onClose}>
       <div className="space-y-4">
+        {target?.calling && (
+          <p className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800">
+            <PhoneCall className="h-4 w-4 shrink-0 animate-pulse" aria-hidden="true" />
+            <span>Calling <b className="font-semibold">{target.calling}</b>… When the call ends, pick what happened.</span>
+          </p>
+        )}
         <div>
           <span className="mb-1.5 block text-sm font-medium text-slate-700">What happened?<span className="ml-0.5 font-semibold text-red-600" aria-hidden="true">*</span></span>
           <div className="grid grid-cols-2 gap-2">

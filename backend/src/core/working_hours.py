@@ -9,6 +9,8 @@ from src.core import app_settings
 from src.core.dates import IST, now_ist
 
 DEFAULT = {"start": "09:30", "end": "18:30", "days": [0, 1, 2, 3, 4]}
+DEFAULT_TIME = time(10, 0)  # a follow-up given only a day rings at 10:00 AM (every follow-up has a time, so every one rings)
+SLOT_MINUTES = 30
 
 
 def _hours() -> tuple[time, time, set[int]]:
@@ -37,6 +39,21 @@ def next_working_morning(at: datetime, hours: tuple[time, time, set[int]] | None
     while d.weekday() not in days:
         d += timedelta(days=1)
     return datetime.combine(d, start, tzinfo=IST)
+
+
+def with_time(due: date, due_at: datetime | None, now: datetime | None = None) -> tuple[date, datetime]:
+    """Every follow-up gets a time, so every one rings. No time given: 10:00 AM that day; when that has already passed
+    (a follow-up for today, set in the afternoon), the next half hour at least 30 minutes ahead. Then working hours apply."""
+    now = now or now_ist()
+    if not due_at:
+        due_at = datetime.combine(due, DEFAULT_TIME, tzinfo=IST)
+        if due_at <= now:
+            ahead = now.astimezone(IST) + timedelta(minutes=SLOT_MINUTES)
+            extra = (-ahead.minute) % SLOT_MINUTES
+            due_at = (ahead + timedelta(minutes=extra)).replace(second=0, microsecond=0)
+            due = due_at.date()
+    d, at = schedule(due, due_at, now)
+    return d, at or due_at
 
 
 def schedule(due: date, due_at: datetime | None, now: datetime | None = None) -> tuple[date, datetime | None]:

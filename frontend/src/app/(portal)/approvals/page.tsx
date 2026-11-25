@@ -37,7 +37,7 @@ export default function ApprovalsPage() {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => { if (user && !allowed) router.replace("/today"); }, [user, allowed, router]);
+  useEffect(() => { if (user && !allowed) router.replace("/dashboard"); }, [user, allowed, router]);
   if (!allowed) return null;
 
   async function decide(item: TermsItem, approve: boolean, why?: string) {

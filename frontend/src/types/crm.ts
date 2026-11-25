@@ -92,7 +92,7 @@ export type Activity = {
 
 export type LeadDetail = {
   lead: Lead;
-  tasks: { id: string; dueDate: string; title?: string | null; kind: string }[];
+  tasks: { id: string; dueDate: string; dueAt?: string | null; title?: string | null; kind: string }[];
   meetings: MeetingItem[];
   timeline: Activity[];
 };
@@ -120,6 +120,15 @@ export type DuplicateMatch = {
 };
 
 export type AppNotification = { id: string; title: string; body?: string | null; link?: string | null; createdAt: string };
+/** The bell in the top bar: alerts plus what is coming up for you. */
+export type NotificationCenter = {
+  alerts: (AppNotification & { readAt?: string | null })[];
+  overdue: FollowUpItem[]; today: FollowUpItem[]; tomorrow: FollowUpItem[];
+  meetings: { id: string; leadId: string; startsAt: string; kind: "physical" | "online"; location?: string | null; companyName?: string | null; contactName?: string | null }[];
+  newLeads: { leadId: string; stage: StageKey; projectTitle?: string | null; createdAt: string; companyName?: string | null; contactName?: string | null; phone?: string | null }[];
+  noNextAction: NoNextAction[];
+  counts: { unread: number; overdue: number; today: number; tomorrow: number; meetings: number; newLeads: number; noNextAction: number; badge: number };
+};
 export type AssignableUser = { id: string; fullName: string | null; role: string; managerId?: string | null };
 
 // ---- Phase 2 ----------------------------------------------------------------------------------------------
@@ -220,9 +229,11 @@ export type ClientSummary = {
   tierIsManual: boolean;
   status: "active" | "dormant";
   nextOccasion?: { name: string; date: string; daysAway: number } | null;
+  occasionCount?: number; // 0: occasion reminders cannot work for this client yet
+  nextCheckIn?: { title?: string | null; dueDate: string; dueAt?: string | null } | null; // the next open call or check-in
 };
 export type ClientOccasion = { id: string; name: string; fromCalendar: boolean; month?: number | null; day?: number | null; leadDays: number; notes?: string | null; nextDate?: string | null; daysAway?: number | null };
-export type ClientTask = { id: string; title?: string | null; dueDate: string; campaignId?: string | null; occasionKey?: string | null };
+export type ClientTask = { id: string; title?: string | null; dueDate: string; dueAt?: string | null; campaignId?: string | null; occasionKey?: string | null };
 export type ClientDetail = {
   client: ClientSummary;
   contacts: ClientContact[];

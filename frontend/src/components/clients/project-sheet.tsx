@@ -73,7 +73,7 @@ export function ProjectSheet({ clientId, clientName, mode, contacts, occasions, 
   return (
     <Sheet
       open={!!clientId}
-      title={inbound ? "New requirement" : "New project"}
+      title={inbound ? "Client enquiry" : "New project"}
       subtitle={inbound ? `${clientName ?? ""} called with a need` : clientName}
       icon={inbound ? PhoneIncoming : FolderPlus}
       tone={inbound ? "emerald" : "violet"}

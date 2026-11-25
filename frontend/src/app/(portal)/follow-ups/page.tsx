@@ -1,5 +1,5 @@
 "use client";
-import { ArrowDown, ArrowUp, CalendarPlus, CheckCircle2, CircleSlash, Columns3, List, Phone, Plus, SlidersHorizontal, X } from "lucide-react";
+import { ArrowDown, ArrowUp, CalendarPlus, CheckCircle2, CircleSlash, List, Phone, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ClientFollowUpSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
@@ -15,7 +15,9 @@ import { LeadPanel } from "@/components/followups/lead-panel";
 import { RescheduleSheet, type RescheduleTarget } from "@/components/followups/reschedule-sheet";
 import { REPEAT_LIMIT, SnoozeSheet } from "@/components/followups/snooze-sheet";
 import { Avatar } from "@/components/ui/avatar";
+import { ClearFilters, FilterLabel, FilterSelect } from "@/components/ui/filter-bar";
 import { Button } from "@/components/ui/button";
+import { BOARD_LIST, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
 import { Spinner } from "@/components/ui/spinner";
@@ -99,6 +101,14 @@ export default function FollowUpsPage() {
   const [layout, setLayoutState] = useState<Layout>("board");
   const [extra, setExtra] = useState<Extra>(null); // Done today / No next action, opened over the layout
   useEffect(() => setLayoutState(readLayout()), []); // after mount: localStorage is not there during server render
+  // The bell links here with ?show=none / ?show=done; when already on this page it sends an event instead.
+  useEffect(() => {
+    const pick = (v: string | null) => { if (v === "none" || v === "done") setExtra(v); };
+    try { pick(new URLSearchParams(window.location.search).get("show")); } catch { /* no query */ }
+    const on = (e: Event) => pick((e as CustomEvent<string>).detail);
+    window.addEventListener("followups:show", on);
+    return () => window.removeEventListener("followups:show", on);
+  }, []);
   const setLayout = (v: Layout) => {
     setLayoutState(v);
     setExtra(null);
@@ -177,10 +187,7 @@ export default function FollowUpsPage() {
         <SearchInput value={filters.q} onChange={(q) => set({ q })} placeholder="Search company, contact, phone" className="min-w-0 flex-1 sm:max-w-sm" />
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {/* Layout of the open follow-ups */}
-          <div role="radiogroup" aria-label="Layout" className="flex h-10 shrink-0 items-center rounded-xl border border-slate-300/80 bg-white p-1">
-            <LayoutButton active={!extra && layout === "board"} onClick={() => setLayout("board")} icon={<Columns3 className="h-4 w-4" />}>Board</LayoutButton>
-            <LayoutButton active={!extra && layout === "list"} onClick={() => setLayout("list")} icon={<List className="h-4 w-4" />}>List</LayoutButton>
-          </div>
+          <ViewToggle value={extra ? null : layout} onChange={setLayout} options={BOARD_LIST} />
           {/* Other lists: click to open, click again to go back */}
           <ListButton active={extra === "done"} onClick={() => toggleExtra("done")} icon={<CheckCircle2 className="h-4 w-4" />}
             count={data?.doneToday.length ?? 0} tone="emerald" label="Done today" />
@@ -192,9 +199,7 @@ export default function FollowUpsPage() {
 
       {/* Row 2: filters (an active one turns blue), Clear, and the counts on the right */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="hidden items-center gap-1.5 text-sm font-medium text-slate-500 sm:flex">
-          <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />Filter
-        </span>
+        <FilterLabel />
         <FilterSelect label="Task type" value={filters.kind} onChange={(kind) => set({ kind })} all="All task types"
           options={Object.entries(KIND_LABEL).map(([value, label]) => ({ value, label }))} />
         <FilterSelect label="Stage" value={filters.stage} onChange={(stage) => set({ stage })} all="All stages"
@@ -204,11 +209,7 @@ export default function FollowUpsPage() {
           <FilterSelect label="Owner" value={owner} onChange={setOwner} all="Whole team"
             options={[{ value: user.id, label: "Mine" }, ...(people.data ?? []).filter((p) => p.id !== user.id).map((p) => ({ value: p.id, label: p.fullName ?? "Unnamed" }))]} />
         )}
-        {filtered && (
-          <button type="button" onClick={() => setFilters(NO_FILTERS)} className="pressable flex h-9 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-800">
-            <X className="h-3.5 w-3.5" aria-hidden="true" />Clear{activeFilters > 1 ? ` (${activeFilters})` : ""}
-          </button>
-        )}
+        <ClearFilters count={activeFilters} onClear={() => setFilters(NO_FILTERS)} />
         <p className="t-meta w-full whitespace-nowrap sm:ml-auto sm:w-auto">
           {data ? (total ? <>
             <b className="font-semibold text-slate-700">{total}</b> open follow-up{total === 1 ? "" : "s"}
@@ -239,9 +240,9 @@ export default function FollowUpsPage() {
         </>
       ) : (
         <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
-          {COLUMNS.map((c) => c.key === "overdue" && data.overdue.length === 0 ? (
-            // Nothing overdue: a narrow strip instead of a full, empty column.
-            <section key={c.key} aria-label={`${c.label}: none`} title="Nothing overdue" className={cn("flex w-11 shrink-0 flex-col items-center gap-3 rounded-2xl py-3", c.tone)}>
+          {COLUMNS.map((c) => (c.key === "overdue" || (c.key === "later" && !dragging)) && data[c.key].length === 0 ? (
+            // Nothing in Overdue or Later: a narrow strip instead of a full, empty column (so the board fits a laptop).
+            <section key={c.key} aria-label={`${c.label}: none`} title={c.key === "overdue" ? "Nothing overdue" : "Nothing due after this week"} className={cn("flex w-11 shrink-0 flex-col items-center gap-3 rounded-2xl py-3", c.tone)}>
               <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-500">0</span>
               <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 [writing-mode:vertical-rl] rotate-180">{c.label}</span>
             </section>
@@ -261,7 +262,7 @@ export default function FollowUpsPage() {
                 </div>
                 <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", c.key === "overdue" ? "bg-red-600 text-white" : "bg-white text-slate-600")}>{data[c.key].length}</span>
               </header>
-              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+              <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden pr-0.5">
                 {dropOn === c.key && <p className="rounded-xl border-2 border-dashed border-brand/40 bg-white/70 py-3 text-center text-xs font-medium text-brand">Drop to move to {c.label.toLowerCase()}</p>}
                 {data[c.key].length === 0 && dropOn !== c.key && <p className="px-1 py-8 text-center text-xs text-slate-400">Nothing {c.hint.toLowerCase()}</p>}
                 {data[c.key].map((f) => (
@@ -290,15 +291,6 @@ export default function FollowUpsPage() {
   );
 }
 
-function LayoutButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: ReactNode; children: ReactNode }) {
-  return (
-    <button type="button" role="radio" aria-checked={active} onClick={onClick}
-      className={cn("flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm font-medium", active ? "bg-brand text-white shadow-sm" : "text-slate-600 hover:bg-slate-100")}>
-      {icon}{children}
-    </button>
-  );
-}
-
 /** Done today / No next action: a button with a count badge; blue while that list is open. */
 function ListButton({ active, onClick, icon, count, tone, label }: {
   active: boolean; onClick: () => void; icon: ReactNode; count: number; tone: "emerald" | "amber"; label: string;
@@ -311,26 +303,6 @@ function ListButton({ active, onClick, icon, count, tone, label }: {
       {icon}{label}
       {count > 0 && <span className={cn("min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none", active ? "bg-brand text-white" : badge)}>{count}</span>}
     </button>
-  );
-}
-
-/** A compact filter: "All …" when unused; turns blue when it is filtering, so applied filters are easy to spot. */
-function FilterSelect({ label, value, onChange, all, options }: {
-  label: string; value: string; onChange: (v: string) => void; all: string; options: { value: string; label: string }[];
-}) {
-  return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "h-9 w-[calc(50%-0.25rem)] cursor-pointer rounded-full border pl-3.5 pr-8 text-sm font-medium outline-none focus:ring-4 focus:ring-brand/15 sm:w-auto",
-        value ? "border-brand bg-brand-soft text-brand" : "border-slate-300/80 bg-white text-slate-700 hover:border-slate-400",
-      )}
-    >
-      <option value="">{all}</option>
-      {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-    </select>
   );
 }
 

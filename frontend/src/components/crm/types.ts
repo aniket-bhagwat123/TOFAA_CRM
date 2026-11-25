@@ -14,6 +14,7 @@ export type LeadTarget = {
   lastCallOutcome?: string | null; // preselected in the call outcome sheet
   callAttempts?: number;
   taskId?: string; // called from a follow-up card: the outcome finishes that follow-up
+  calling?: string; // set while a call is being dialled: "Marcus Vance · 98xxxxxxxx" (shown at the top of the outcome sheet)
 };
 
 export type LeadAction = "call" | "whatsapp" | "meeting" | "stage" | "lost" | "reassign" | "complete";

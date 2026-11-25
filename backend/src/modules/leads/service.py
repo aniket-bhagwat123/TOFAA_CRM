@@ -12,6 +12,7 @@ from src.core.images import checked_upload
 from src.core.keys import company_key, email_key, phone_key
 from src.core.pagination import PageParams, page_meta, parse_sort
 from src.core.parallel import par
+from src.core.soft_delete import is_deleted, live, require_ready
 from src.core.storage import CLIENT_IMAGES, delete_image, guard_photo_write, signed_url, signed_urls, upload_image
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
@@ -49,8 +50,8 @@ def get_lead_row(user: Profile, lead_id: str) -> dict:
     """The lead with company, contact and owner, after checking the user may see it."""
     require_lead_role(user)
     rows = get_service_client().table("leads").select(LEAD_SELECT).eq("id", lead_id).limit(1).execute().data
-    if not rows:
-        raise NotFoundError("Lead not found.")
+    if not rows or is_deleted(rows[0]):
+        raise NotFoundError("Lead not found. It may have been deleted.")
     assert_can_access_lead(user, rows[0])
     return attach_photos(rows)[0]
 
@@ -135,7 +136,7 @@ def find_duplicates(user: Profile, company_name: str | None, phone: str | None, 
     def companies() -> list[dict]:
         if not ck:
             return []
-        return db.table("companies").select("id").eq("name_key", ck).limit(50).execute().data
+        return live(db.table("companies").select("id").eq("name_key", ck), "companies").limit(50).execute().data
 
     contact_rows, company_rows = par(contacts, companies)  # one round trip for both
     for c in contact_rows:
@@ -151,7 +152,7 @@ def find_duplicates(user: Profile, company_name: str | None, phone: str | None, 
 
     visible = visible_owner_ids(user)
     rows = (
-        db.table("leads").select(LEAD_SELECT).in_("company_id", list(matched)).order("created_at", desc=True).limit(20).execute().data
+        live(db.table("leads").select(LEAD_SELECT).in_("company_id", list(matched))).order("created_at", desc=True).limit(20).execute().data
     )
     return [
         {
@@ -191,7 +192,7 @@ def create_lead(user: Profile, body: schemas.LeadCreate) -> dict:
 
     db = get_service_client()
     if only_company and body.use_existing_company:
-        company = db.table("companies").select("id,name,kind,city").eq("name_key", company_key(body.company_name)).limit(1).execute().data[0]
+        company = live(db.table("companies").select("id,name,kind,city").eq("name_key", company_key(body.company_name)), "companies").limit(1).execute().data[0]
     else:
         company = (
             db.table("companies")
@@ -270,6 +271,7 @@ def _run_filtered(run, call_outcome, tag=None):
 
 
 def _lead_filters(q, user: Profile, *, stage, overdue, source, owner_id, search, pipeline="new_business", company_id=None, occasion=None, origin=None, call_outcome=None, tag=None):
+    q = live(q)  # deleted leads never show
     q = q.eq("pipeline", pipeline if pipeline in STAGES_FOR else "new_business")  # Leads and Pipeline show one pipeline at a time
     owners = _owner_ids_for(user, owner_id)
     if owners is not None:
@@ -341,8 +343,8 @@ def _lead_detail(user: Profile, lead_id: str) -> dict:
         lambda: db.table("activities").select("*, actor:profiles!actor_id(full_name)").eq("lead_id", lead_id)
         .order("created_at", desc=True).limit(150).execute().data,
     )
-    if not rows:
-        raise NotFoundError("Lead not found.")
+    if not rows or is_deleted(rows[0]):
+        raise NotFoundError("Lead not found. It may have been deleted.")
     assert_can_access_lead(user, rows[0])
     lead = attach_photos(rows)[0]
     # Where a lost lead stopped, so the screen shows the road it really travelled and offers only those stages to reopen.
@@ -644,3 +646,71 @@ def _positive_number(value) -> bool:
     except (TypeError, ValueError):
         return False
     return math.isfinite(number) and number > 0
+
+
+# --- soft delete -----------------------------------------------------------------------------------------------------
+
+# What makes a lead real business that must be kept (table, label for one, label for many).
+LEAD_LINKS = [
+    ("quotations", "quotation", "quotations"),
+    ("agreements", "agreement", "agreements"),
+    ("payment_requests", "payment request", "payment requests"),
+    ("orders", "order", "orders"),
+    ("lead_samples", "sample", "samples"),
+    ("moms", "meeting minutes", "meeting minutes"),
+    ("meetings", "meeting", "meetings"),
+]
+
+
+def lead_blockers(lead_id: str) -> list[dict]:
+    """Everything connected to the lead that stops it being deleted, as {what, count}."""
+    db = get_service_client()
+
+    def count(table: str) -> int:
+        try:
+            return db.table(table).select("lead_id", count="exact").eq("lead_id", lead_id).limit(1).execute().count or 0
+        except Exception:  # noqa: BLE001 - a table from a migration not applied yet has nothing in it
+            return 0
+
+    counts = par(*[(lambda t=t: count(t)) for t, _, _ in LEAD_LINKS])
+    return [{"what": one if n == 1 else many, "count": n} for (_, one, many), n in zip(LEAD_LINKS, counts) if n]
+
+
+def _join(parts: list[str]) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
+def delete_lead(user: Profile, lead_id: str) -> dict:
+    """Soft delete: hide a lead that was added by mistake (a duplicate, test data, a wrong entry).
+    Only when nothing is connected to it; a lead with business history is closed as Lost instead, so reports and the
+    client's history stay right. Managers and admins can delete any lead; an executive only their own."""
+    require_ready("leads", "companies")
+    lead = get_lead_row(user, lead_id)
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER) and not (user.role == Role.SALES_EXECUTIVE and lead.get("owner_id") == user.id):
+        raise ForbiddenError("Only a manager, an admin or the lead's owner can delete this lead.")
+    name = lead["company"]["name"] + (f" \u00b7 {lead['project_title']}" if lead.get("project_title") and lead.get("pipeline") == "client" else "")
+    if lead["stage"] == "closed_won":
+        raise ConflictError(
+            f"{name} can't be deleted: it is a won deal (paid). Won deals are kept for revenue, orders and the client's history.",
+            data={"blockers": [{"what": "won deal", "count": 1}]},
+        )
+    blockers = lead_blockers(lead_id)
+    if blockers:
+        listed = _join([f"{b['count']} {b['what']}" for b in blockers])
+        raise ConflictError(
+            f"{name} can't be deleted because it has {listed}. Close it as Lost instead, so its history is kept.",
+            data={"blockers": blockers},
+        )
+
+    db = get_service_client()
+    now = now_ist().isoformat()
+    db.table("leads").update({"deleted_at": now, "deleted_by": user.id, "next_follow_up": None}).eq("id", lead_id).execute()
+    db.table("tasks").update({"done_at": now, "outcome": "deleted"}).eq("lead_id", lead_id).is_("done_at", "null").execute()
+    add_activity(lead_id, user.id, "note", note=f"Lead deleted by {user.full_name or 'a user'}")
+    # The company goes with its last lead, unless it is a client: then re-adding it later starts clean.
+    company = lead.get("company") or {}
+    others = live(db.table("leads").select("id").eq("company_id", lead["company_id"]).neq("id", lead_id)).limit(1).execute().data
+    if not others and not company.get("client_since"):
+        db.table("companies").update({"deleted_at": now, "deleted_by": user.id}).eq("id", lead["company_id"]).execute()
+    write_audit(user.id, "delete", "leads", lead_id, {"company": company.get("name"), "stage": lead["stage"]})
+    return {"id": lead_id, "deleted": True}

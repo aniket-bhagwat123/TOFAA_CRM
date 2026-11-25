@@ -104,10 +104,16 @@ export function TypeChips({ f, when, late }: { f: FollowUpItem; when: string; la
   );
 }
 
-export function FlagChips({ f, late, escalated }: { f: FollowUpItem; late: boolean; escalated?: boolean }) {
+/**
+ * At most one warning per card, the most important: a missed client callback, then escalated, then postponed.
+ * "Client requested" (not missed) is information, not a warning, so it can sit next to one.
+ */
+export function FlagChips({ f, late, escalated: isEscalated }: { f: FollowUpItem; late: boolean; escalated?: boolean }) {
   const requestedMissed = !!f.clientRequested && late;
-  const postponed = (f.snoozeCount ?? 0) >= REPEAT_LIMIT;
-  if (!f.clientRequested && !postponed && !escalated) return null;
+  const warning = requestedMissed ? "missed" : isEscalated ? "escalated" : (f.snoozeCount ?? 0) >= REPEAT_LIMIT ? "postponed" : null;
+  const postponed = warning === "postponed";
+  const escalated = warning === "escalated";
+  if (!f.clientRequested && !warning) return null;
   return (
     <div className="flex flex-wrap gap-1.5">
       {escalated && (
@@ -164,14 +170,13 @@ export function SnoozeButton({ f, onSnooze, side = "bottom", className, open }: 
   const rings = f.dueAt ? ` · rings ${formatDate(f.dueAt)}, ${clock(f.dueAt)}` : "";
   const label = snoozed ? `Snoozed ${f.snoozeCount}×${rings}` : "Snooze";
   return (
-    <Tooltip label={label} side={side} className={cn("shrink-0", className)}>
+    <Tooltip label={label} side={side} align="end" className={cn("shrink-0", className)}>
       <button type="button" aria-label={label} aria-pressed={snoozed || open} onClick={onSnooze}
         className={cn(
           "pressable relative flex h-8 w-8 items-center justify-center rounded-full",
           open ? "bg-amber-500 text-white shadow-sm" : snoozed ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300" : "text-slate-500 hover:bg-amber-50 hover:text-amber-700",
         )}>
         <AlarmClock className="h-4 w-4" />
-        {snoozed && !open && <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-[0.875rem] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[9px] font-bold leading-none text-white">{f.snoozeCount}</span>}
       </button>
     </Tooltip>
   );
@@ -205,7 +210,7 @@ export function FollowUpCard({ f, when, late, escalated, snoozeOpen, showOwner, 
           <div className="t-meta truncate">{f.contactName || "No contact"}</div>
         </button>
         {showOwner && f.ownerName && (
-          <Tooltip label={f.ownerName} side="bottom" className="shrink-0"><Avatar src={f.ownerAvatarUrl} name={f.ownerName} size="xs" /></Tooltip>
+          <Tooltip label={f.ownerName} side="bottom" align="end" className="shrink-0"><Avatar src={f.ownerAvatarUrl} name={f.ownerName} size="xs" /></Tooltip>
         )}
         <SnoozeButton f={f} onSnooze={onSnooze} open={snoozeOpen} className="-mr-1 -mt-0.5" />
       </div>
