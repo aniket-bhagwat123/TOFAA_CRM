@@ -55,7 +55,7 @@ export type PersonPreferences = {
 export type PersonLink = { id: string; relatedRecipientId: string; relationshipType: string; related?: { id: string; name: string; deletedAt?: string | null } | null };
 export type HistoryEntry = { id: number; createdAt: string; actorName?: string | null; action: string; field?: string | null; oldValue?: unknown; newValue?: unknown; source: string };
 
-export type PeopleGroup = { id: string; companyId: string; accountName?: string | null; name: string; recipientIds: string[]; count: number; createdAt: string };
+export type PeopleGroup = { id: string; companyId: string; accountName?: string | null; name: string; recipientIds: string[]; count: number; createdAt: string; updatedAt?: string | null };
 
 export type ImportResult = { total: number; created: number; skipped: { row: number; name: string; reason: string }[]; groups: { name: string; added: number; new: boolean }[] };
 

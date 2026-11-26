@@ -91,6 +91,8 @@ def update(user: Profile, group_id: str, body: schemas.GroupUpdate) -> dict:
     if body.recipient_ids is not None or body.add_recipient_ids:
         _check_members(g["company_id"], members)
         _set_members(group_id, members)
+        # A change of members counts as an update too, so "Updated <date>" on the Groups tab stays true.
+        get_service_client().table("recipient_groups").update({"updated_at": now_ist().isoformat()}).eq("id", group_id).execute()
     return _shape(_group(user, group_id))
 
 

@@ -61,6 +61,8 @@ export default function PeoplePage() {
   const [importing, setImporting] = useState(false);
   const [removing, setRemoving] = useState<string[] | null>(null);
   const [grouping, setGrouping] = useState<string[] | null>(null); // "New group" from a selection
+  const [groupSearch, setGroupSearch] = useState("");             // Groups tab
+  const [newGroup, setNewGroup] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const filters = {
@@ -144,22 +146,27 @@ export default function PeoplePage() {
             <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" />Add person</Button>
           </div>
         )}
+        {tab === "groups" && (
+          <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
+            {accounts.length > 1 && (
+              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
+                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
+            )}
+            <SearchInput value={groupSearch} onChange={setGroupSearch} placeholder="Search groups" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />
+            {(companyId || groupSearch) && (
+              <button type="button" onClick={() => { setCompanyId(""); setGroupSearch(""); }}
+                className="pressable h-10 rounded-lg px-3 text-sm font-semibold text-brand hover:bg-brand-soft">
+                Clear all
+              </button>
+            )}
+            <Button onClick={() => setNewGroup(true)}><Plus className="h-4 w-4" />New group</Button>
+          </div>
+        )}
       </div>
 
       {tab === "groups" ? (
-        <div className="space-y-3">
-          {accounts.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-card">
-              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
-                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
-              <button type="button" onClick={() => setCompanyId("")} disabled={!companyId}
-                className="pressable ml-auto h-9 rounded-lg px-3 text-sm font-semibold text-brand hover:bg-brand-soft disabled:pointer-events-none disabled:opacity-40">
-                Clear all
-              </button>
-            </div>
-          )}
-          <GroupsPanel companyId={companyId || undefined} accounts={accounts} showAccount={!companyId && accounts.length > 1} />
-        </div>
+        <GroupsPanel companyId={companyId || undefined} accounts={accounts} showAccount={!companyId && accounts.length > 1}
+          search={groupSearch} creating={newGroup} onCreateClose={() => setNewGroup(false)} onChanged={() => void groups.reload()} />
       ) : (
         <>
           {/* Row 2: more filters, search and Clear all, in one card (the count is in the footer under the table) */}

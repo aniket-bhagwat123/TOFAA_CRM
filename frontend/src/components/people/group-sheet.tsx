@@ -3,6 +3,7 @@ import { Users, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { InputField } from "@/components/ui/input-field";
 import { SearchInput } from "@/components/ui/search-input";
 import { SelectField } from "@/components/ui/select-field";
@@ -22,10 +23,12 @@ type Props = {
   presetIds?: string[];               // "New group" from a selection
   onClose: () => void;
   onSaved: (g: PeopleGroup) => void;
+  onDeleted?: () => void;             // shows "Delete group" when editing
 };
 
 /** Create or edit a group: a name and the people in it, all from one client. */
-export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds, onClose, onSaved }: Props) {
+export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds, onClose, onSaved, onDeleted }: Props) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [name, setName] = useState("");
   const [companyId, setCompanyId] = useState("");
   const [picked, setPicked] = useState<Map<string, string>>(new Map()); // id -> name
@@ -40,7 +43,7 @@ export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds,
 
   useEffect(() => {
     if (!open) return;
-    setErrors({}); setSearch("");
+    setErrors({}); setSearch(""); setConfirmDelete(false);
     setName(group?.name ?? "");
     setCompanyId(group?.companyId ?? defaultCompanyId ?? (accounts.length === 1 ? accounts[0].id : ""));
     setPicked(new Map((group?.recipientIds ?? presetIds ?? []).map((id) => [id, ""])));
@@ -50,12 +53,28 @@ export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds,
     if (items?.length) setPicked((m) => new Map([...m].map(([id, n]) => [id, n || items.find((p) => p.id === id)?.name || "…"])));
   }, [known.data]);
 
-  const toggle = (id: string, label: string) => setPicked((m) => { const n = new Map(m); if (n.has(id)) n.delete(id); else n.set(id, label); return n; });
+  const toggle = (id: string, label: string) => {
+    setPicked((m) => { const n = new Map(m); if (n.has(id)) n.delete(id); else n.set(id, label); return n; });
+    setErrors((x) => ({ ...x, recipientIds: "" }));
+  };
+
+  async function remove() {
+    if (!group) return;
+    setBusy(true);
+    try {
+      await apiClient.delete(`/people-groups/${group.id}`);
+      toast.success("Group deleted");
+      setConfirmDelete(false);
+      onClose();
+      onDeleted?.();
+    } catch (err) { toast.error(errorMessage(err)); } finally { setBusy(false); }
+  }
 
   async function save() {
     const e: Record<string, string> = {};
     if (!name.trim()) e.name = "Enter a group name";
     if (!companyId) e.companyId = "Pick the client account";
+    else if (!picked.size) e.recipientIds = "Choose at least one person";
     if (Object.keys(e).length) return setErrors(e);
     setBusy(true);
     try {
@@ -95,7 +114,7 @@ export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds,
               </div>
             )}
             <SearchInput className="sm:w-full" value={search} onChange={setSearch} placeholder="Search people to add" />
-            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+            <ul className="max-h-[min(16rem,35vh)] overscroll-contain divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
               {(people.data?.items ?? []).map((p) => (
                 <li key={p.id}>
                   <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
@@ -107,10 +126,23 @@ export function GroupSheet({ open, group, accounts, defaultCompanyId, presetIds,
               ))}
               {people.data && people.data.items.length === 0 && <li className="px-3 py-4 text-center text-sm text-slate-400">No people match.</li>}
             </ul>
+            {errors.recipientIds && <p role="alert" className="text-sm text-red-600">{errors.recipientIds}</p>}
           </div>
         )}
-        <Button onClick={() => void save()} loading={busy} className="w-full">Save group</Button>
+        {/* Pinned to the bottom of the dialog, so the buttons never need scrolling to reach. */}
+        <div className="sticky bottom-0 z-10 -mx-5 -mb-8 flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-5 py-3 sm:-mb-6">
+          {group && onDeleted
+            ? <Button variant="ghost" className="px-2 text-red-600 hover:bg-red-50" disabled={busy} onClick={() => setConfirmDelete(true)}>Delete group</Button>
+            : <span />}
+          <div className="flex shrink-0 gap-2">
+            <Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button>
+            <Button onClick={() => void save()} loading={busy}>{group ? "Save changes" : "Create group"}</Button>
+          </div>
+        </div>
       </div>
+      <DeleteDialog open={confirmDelete} title="Delete this group?" loading={busy}
+        message={`“${group?.name ?? ""}” will be deleted. The people stay; only the group is removed.`}
+        onConfirm={() => void remove()} onCancel={() => setConfirmDelete(false)} />
     </Sheet>
   );
 }
