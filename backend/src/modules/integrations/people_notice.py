@@ -15,7 +15,11 @@ from src.core.config import settings
 
 log = logging.getLogger(__name__)
 WRITES = ("POST", "PATCH", "PUT", "DELETE")
-PEOPLE_PATHS = ("/people", "/integrations/gifting/people")
+PEOPLE_PATHS = (
+    "/people", "/integrations/gifting/people",
+    "/people-groups", "/integrations/gifting/people-groups",
+    "/integrations/gifting/tenant",  # a newly linked account has people and groups to copy
+)
 DEBOUNCE_SECONDS = 0.3
 PATH = "/api/v1/integrations/crm/people-changed"
 

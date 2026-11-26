@@ -5,6 +5,7 @@ Background push (app closed) needs a scheduler plus web-push keys and is not par
 """
 from datetime import date, datetime, time, timedelta
 
+from src.modules.gifting_requests import service as gifting_requests
 from src.core import cache
 from src.core.dates import IST, now_ist, today_ist
 from src.core.parallel import par
@@ -30,6 +31,7 @@ def notify(user_id: str, key: str, title: str, body: str | None = None, link: st
 
 
 def generate(user: Profile) -> None:
+    gifting_requests.raise_alerts_in_background(user)  # KAMs: new gift requests from their clients
     if user.role not in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER, Role.ADMIN):
         return
     db = get_service_client()

@@ -13,6 +13,10 @@ from src.modules.reports.router import router as reports_router
 from src.modules.samples.router import router as samples_router
 from src.modules.auth.router import router as auth_router
 from src.modules.banners.router import router as banners_router
+from src.modules.gifting_requests.oms_router import router as oms_router
+from src.modules.gifting_requests.router import clients_router as gifting_clients_router
+from src.modules.gifting_requests.router import planning_router as gifting_planning_router
+from src.modules.gifting_requests.router import router as gifting_requests_router
 from src.modules.integrations.router import router as integrations_router
 from src.modules.people.router import router as people_router
 from src.modules.clients.router import router as clients_router
@@ -42,6 +46,10 @@ api_router.include_router(integrations_router)
 api_router.include_router(users_router)
 api_router.include_router(people_router)  # KAM and admin
 api_router.include_router(banners_router)  # KAM and admin
+api_router.include_router(gifting_requests_router)  # KAM and admin
+api_router.include_router(gifting_planning_router)  # KAM and admin
+api_router.include_router(gifting_clients_router)  # KAM and admin
+api_router.include_router(oms_router)  # called by OMS, signed
 api_router.include_router(leads_router)
 api_router.include_router(activities_router)
 api_router.include_router(tasks_router)

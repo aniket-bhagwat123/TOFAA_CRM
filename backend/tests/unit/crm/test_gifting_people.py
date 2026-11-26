@@ -85,8 +85,20 @@ def test_another_clients_person_is_not_found(monkeypatch):
     ("PUT", "/api/v1/integrations/gifting/people/abc/preferences", 200, True),
     ("GET", "/api/v1/people", 200, False),
     ("POST", "/api/v1/people", 409, False),
-    ("POST", "/api/v1/people-groups", 201, False),
+    ("POST", "/api/v1/people-groups", 201, True),  # groups are copied to Gifting OS too
     ("POST", "/api/v1/leads", 201, False),
 ])
 def test_which_writes_tell_gifting_os(method, path, status, expected):
     assert is_people_write(method, path, status) is expected
+
+
+def test_group_changes_and_a_new_link_notify_gifting_os():
+    api = settings.API_V1_STR
+    assert is_people_write("POST", f"{api}/people-groups", 201)
+    assert is_people_write("PUT", f"{api}/people-groups/abc", 200)
+    assert is_people_write("PUT", f"{api}/integrations/gifting/tenant", 200)
+    assert not is_people_write("GET", f"{api}/people-groups", 200)
+
+
+def test_groups_sync_needs_the_key(linked):
+    assert TestClient(app).get(f"{BASE}/groups-sync", headers={"X-API-Key": "wrong"}).status_code == 401

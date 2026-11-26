@@ -67,6 +67,14 @@ class Settings(BaseSettings):
     GIFTING_OS_API_URL: str = ""
     # Email of the KAM who owns client accounts created for new Gifting OS clients (empty = no owner: admins only).
     GIFTING_OS_ACCOUNT_OWNER: str = ""
+    # Pilot: emails (comma separated) of the only CRM users who may change gifting data. Empty = every KAM and admin.
+    # Everyone allowed to see it still can.
+    GIFTING_PILOT_EMAILS: str = ""
+
+    # Order Management System. Empty = no handoff: the KAM moves confirmed requests on by hand.
+    OMS_API_URL: str = ""
+    OMS_API_KEY: str = ""
+    OMS_WEBHOOK_SECRET: str = ""  # OMS signs its status updates with this; empty = reject them all
 
     # Client management
     CLIENT_TIER_A: int = 1_000_000  # rupees won in the last 12 months for tier A

@@ -1,4 +1,4 @@
-import { BadgeCheck, BarChart3, Contact, Image as ImageIcon, Target, Building2, CalendarClock, FileText, History, KanbanSquare, LayoutDashboard, PackageCheck, Settings, User, Users, Wallet } from "lucide-react";
+import { BadgeCheck, BarChart3, Gift, Contact, Image as ImageIcon, Target, Building2, CalendarClock, FileText, History, KanbanSquare, LayoutDashboard, PackageCheck, Settings, User, Users, Wallet } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/types/api";
 
@@ -20,6 +20,7 @@ const users = { href: "/users", label: "Users", icon: Users };
 const settings = { href: "/settings", label: "Settings", icon: Settings };
 const people = { href: "/people", label: "People", icon: Contact }; // KAM and admin
 const banners = { href: "/banners", label: "Banners", icon: ImageIcon }; // KAM and admin
+const giftRequests = { href: "/gifting-requests", label: "Gift Requests", icon: Gift }; // KAM and admin
 export const profileItem = { href: "/profile", label: "Profile", icon: User };
 
 /**
@@ -36,11 +37,11 @@ export function navFor(role: Role): NavItem[] {
     case "sales_manager":
       return [dashboard, leads, followUps, quotations, approvals, reports];
     case "admin":
-      return [dashboard, leads, followUps, clients, people, quotations, orders, payments, approvals, reports, users, banners, settings, activity];
+      return [dashboard, leads, followUps, clients, people, giftRequests, quotations, orders, payments, approvals, reports, users, banners, settings, activity];
     case "finance":
       return [dashboard, payments];
     case "kam":
-      return [dashboard, myAccounts, people, orders, followUps, banners]; // their accounts, those accounts' people and orders, their follow-ups
+      return [dashboard, myAccounts, people, giftRequests, orders, followUps, banners]; // their accounts, those accounts' people and orders, their follow-ups
     default:
       return [];
   }

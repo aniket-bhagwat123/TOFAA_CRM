@@ -9,6 +9,7 @@ Extra endpoints:
   GET  /tenant          the linked client account (404 code TENANT_NOT_LINKED before linking)
   PUT  /tenant          link the tenant: an account with the same name, else a new client account
   GET  /people-sync     full rows (with addresses, preferences, links) changed since a moment, for the Gifting OS mirror
+  GET  /groups-sync     every group of every linked client with its members (a full snapshot, so deletions show too)
 """
 import logging
 from datetime import datetime, timezone
@@ -109,6 +110,9 @@ def link_tenant(body: LinkIn, tenant_id: TenantDep, _key: Annotated[None, Depend
                 "name": body.name.strip(), "name_key": key, "created_by": owner, "client_since": now,
                 "account_owner_id": owner, "gifting_tenant_id": tenant_id,
             }).execute().data[0]
+        # People already in this account changed before Gifting OS's "changed after" mark: mark them changed again so
+        # the next sync copies all of them (a trigger sets changed_at).
+        db.table("recipients").update({"changed_at": now}).eq("company_id", company["id"]).execute()
         log.info("linked Gifting OS tenant %s to CRM account %s", tenant_id, company["id"])
     elif not company.get("client_since"):
         db.table("companies").update({"client_since": now}).eq("id", company["id"]).execute()
@@ -151,6 +155,36 @@ def people_sync(
         "addresses": addresses.get(r["id"], []), "preferences": prefs.get(r["id"]), "relationships": links.get(r["id"], []),
     } for r in rows]
     return ok({"items": items, "next_since": rows[-1]["changed_at"] if rows else since, "more": not ids and len(rows) == limit})
+
+
+def _all(query) -> list[dict]:
+    """Every row of a query. The database returns at most one page per call, and a short snapshot would look like
+    deletions to Gifting OS, so read until an empty page."""
+    rows: list[dict] = []
+    while True:
+        page = query().range(len(rows), len(rows) + SYNC_PAGE - 1).execute().data
+        if not page:
+            return rows
+        rows.extend(page)
+
+
+@app.get("/groups-sync")
+def groups_sync(_key: Annotated[None, Depends(require_gifting_os_key)]):
+    db = get_service_client()
+    tenants = {c["id"]: c["gifting_tenant_id"] for c in
+               _all(lambda: db.table("companies").select("id,gifting_tenant_id").not_.is_("gifting_tenant_id", "null").order("id"))}
+    if not tenants:
+        return ok({"tenant_ids": [], "items": []})
+    groups = _all(lambda: db.table("recipient_groups").select("id,company_id,name,updated_at").in_("company_id", list(tenants)).order("id"))
+    members: dict[str, list[str]] = {g["id"]: [] for g in groups}
+    ids = list(members)
+    for i in range(0, len(ids), 150):
+        part = ids[i:i + 150]
+        for m in _all(lambda: db.table("recipient_group_members").select("group_id,recipient_id").in_("group_id", part).order("group_id").order("recipient_id")):
+            members[m["group_id"]].append(m["recipient_id"])
+    items = [{"id": g["id"], "tenant_id": tenants[g["company_id"]], "name": g["name"], "updated_at": g["updated_at"],
+              "recipient_ids": members[g["id"]]} for g in groups]
+    return ok({"tenant_ids": sorted(tenants.values()), "items": items})
 
 
 def _parts(db, ids: list[str]) -> tuple[dict, dict, dict]:

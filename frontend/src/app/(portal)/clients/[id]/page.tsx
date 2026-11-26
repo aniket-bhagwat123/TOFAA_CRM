@@ -12,6 +12,7 @@ import { ProjectSheet, type ProjectMode } from "@/components/clients/project-she
 import { RepeatSheet } from "@/components/clients/repeat-sheet";
 import { SendQuotationSheet } from "@/components/crm/send-quotation-sheet";
 import { Timeline } from "@/components/crm/timeline";
+import { GiftingOsCard } from "@/components/gifting/os-client-card";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -188,6 +189,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
 
       {/* right column */}
       <div className="space-y-4">
+        {(role === "admin" || role === "kam") && <GiftingOsCard companyId={id} />}
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarHeart className="h-4 w-4 text-indigo-500" /> Occasions</h2>
