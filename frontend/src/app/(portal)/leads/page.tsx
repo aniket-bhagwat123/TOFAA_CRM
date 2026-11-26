@@ -1,8 +1,10 @@
 "use client";
-import { FileUp, Plus } from "lucide-react";
+import { FileUp, Plus, UserCog, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { BoardCard } from "@/components/crm/board-card";
+import { BulkReassignSheet } from "@/components/crm/bulk-reassign-sheet";
 import { CALL_STATUS_OPTIONS, TAG_OPTIONS } from "@/components/crm/call-status-badge";
 import { EditLeadSheet } from "@/components/crm/edit-lead-sheet";
 import { ImportModal } from "@/components/crm/import-modal";
@@ -44,6 +46,10 @@ const COLUMNS: Column[] = [
 ];
 const VIEW_KEY = "tofaa-leads-view";
 
+const MAX_BULK = 200; // the most leads one bulk reassign accepts
+// The dropdowns share the filter row's width equally, so Overdue stays on the same line; narrow screens still wrap.
+const FIT = "sm:min-w-[7.5rem] sm:flex-1 sm:basis-0 sm:pl-3 sm:pr-7";
+
 /**
  * Leads: one module, two ways to look at the same deals.
  * Board: a column per stage, drag a card to move it. Cards: searchable cards, three per row.
@@ -68,6 +74,8 @@ export default function LeadsPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set()); // managers, table view; kept across pages
+  const [reassigning, setReassigning] = useState<string[] | null>(null);
   const [over, setOver] = useState<string | null>(null);
   const q = useDebounce(search, 300);
 
@@ -101,6 +109,16 @@ export default function LeadsPage() {
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const reload = () => { void board.reload(); void list.reload(); };
   const actions = useLeadActions(reload);
+
+  // Other filters (or the board) show other leads: nothing stays selected out of sight.
+  useEffect(() => { setSelected(new Set()); }, [q, stage, source, callStatus, tag, owner, overdue, view]);
+  const choose = (ids: string[], on: boolean) => {
+    const next = new Set(selected);
+    ids.forEach((id) => (on ? next.add(id) : next.delete(id)));
+    if (next.size > MAX_BULK) return void toast.error(`You can select up to ${MAX_BULK} leads at a time.`);
+    setSelected(next);
+  };
+  const selection = manager ? { ids: selected, toggle: (id: string) => choose([id], !selected.has(id)), setMany: choose } : undefined;
 
   const columns = COLUMNS;
   const boardLeads = board.data ?? [];
@@ -142,15 +160,15 @@ export default function LeadsPage() {
       <div className="flex flex-wrap items-center gap-2">
         <FilterLabel />
         {view === "table" && (
-          <FilterSelect label="Stage" all="All stages" value={stage} onChange={(v) => reset(() => setStage(v))}
+          <FilterSelect className={FIT} label="Stage" all="All stages" value={stage} onChange={(v) => reset(() => setStage(v))}
             options={columns.flatMap((c) => c.stages).map((s) => ({ value: s, label: STAGE_LABEL[s] }))} />
         )}
-        <FilterSelect label="Source" all="All sources" value={source} onChange={(v) => reset(() => setSource(v))}
+        <FilterSelect className={FIT} label="Source" all="All sources" value={source} onChange={(v) => reset(() => setSource(v))}
           options={(actions.meta?.sources ?? []).map((s) => ({ value: s, label: s }))} />
-        <FilterSelect label="Call status" all="All call statuses" value={callStatus} onChange={(v) => reset(() => setCallStatus(v))} options={CALL_STATUS_OPTIONS} />
-        <FilterSelect label="Tag" all="All tags" value={tag} onChange={(v) => reset(() => setTag(v))} options={TAG_OPTIONS} />
+        <FilterSelect className={cn(FIT, "sm:grow-[1.35]")} label="Call status" all="All call statuses" value={callStatus} onChange={(v) => reset(() => setCallStatus(v))} options={CALL_STATUS_OPTIONS} />
+        <FilterSelect className={FIT} label="Tag" all="All tags" value={tag} onChange={(v) => reset(() => setTag(v))} options={TAG_OPTIONS} />
         {manager && user && (
-          <FilterSelect label="Owner" all="Whole team" value={owner} onChange={(v) => reset(() => setOwner(v))}
+          <FilterSelect className={FIT} label="Owner" all="Whole team" value={owner} onChange={(v) => reset(() => setOwner(v))}
             options={[{ value: user.id, label: "My deals" }, ...(people.data ?? []).filter((p) => p.id !== user.id).map((p) => ({ value: p.id, label: p.fullName ?? "Unnamed" }))]} />
         )}
         <FilterToggle on={overdue} onChange={(on) => reset(() => setOverdue(on))} tone="red">Overdue</FilterToggle>
@@ -195,7 +213,14 @@ export default function LeadsPage() {
 
       {view === "table" && list.data && !isEmpty && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <LeadTable leads={list.data.items} canReassign={manager} actions={actions} onEdit={setEditing} />
+          {selected.size > 0 && (
+            <div role="region" aria-label="Selected leads" aria-live="polite" className="sticky top-0 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-brand/30 bg-brand-soft px-3 py-2 text-sm">
+              <span className="font-medium text-brand">{selected.size} selected</span>
+              <button type="button" aria-label="Clear selection" onClick={() => setSelected(new Set())} className="pressable rounded p-1 text-brand hover:bg-white/60"><X className="h-4 w-4" /></button>
+              <Button className="ml-auto" onClick={() => setReassigning([...selected])}><UserCog className="h-4 w-4" /> Reassign</Button>
+            </div>
+          )}
+          <LeadTable leads={list.data.items} canReassign={manager} actions={actions} onEdit={setEditing} selection={selection} />
           {list.data.meta.pages > 1 && (
             <div className="flex items-center justify-between gap-3 pt-4 text-sm text-slate-600">
               <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
@@ -209,6 +234,7 @@ export default function LeadsPage() {
       {editing && <EditLeadSheet lead={editing} meta={actions.meta ?? undefined} open onClose={() => setEditing(null)} onSaved={reload} />}
       <LeadFormSheet open={addOpen} onClose={() => setAddOpen(false)} onCreated={reload} />
       <ImportModal open={importOpen} onClose={() => setImportOpen(false)} onImported={reload} />
+      <BulkReassignSheet leadIds={reassigning} onClose={() => setReassigning(null)} onDone={() => { setSelected(new Set()); reload(); }} />
       {actions.sheets}
     </div>
   );

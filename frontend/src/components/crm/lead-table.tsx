@@ -28,7 +28,8 @@ export type Actions = {
   moveTo: (t: LeadTarget, s: StageKey) => void;
 };
 
-type Props = { leads: Lead[]; canReassign: boolean; actions: Actions; onEdit: (lead: Lead) => void };
+export type Selection = { ids: Set<string>; toggle: (id: string) => void; setMany: (ids: string[], on: boolean) => void };
+type Props = { leads: Lead[]; canReassign: boolean; actions: Actions; onEdit: (lead: Lead) => void; selection?: Selection };
 
 // Small, quiet icon buttons: grey until hovered, so the row reads as text first.
 export const iconButton = "pressable inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-35";
@@ -38,7 +39,8 @@ export const mapsHref = (l: Lead) =>
   l.company.city ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${l.company.name}, ${l.company.city}`)}` : null;
 
 /** Leads as rows: who, how to reach them in one tap, where they are in the deal, and where they are on the map. */
-export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
+export function LeadTable({ leads, canReassign, actions, onEdit, selection }: Props) {
+  const allPicked = !!selection && leads.length > 0 && leads.every((l) => selection.ids.has(l.id));
   const router = useRouter();
   const showCalls = leads.some((l) => l.pipeline !== "client"); // client projects do not run on calls
   const stop = (fn: () => void) => (e: MouseEvent) => { e.stopPropagation(); fn(); };
@@ -48,6 +50,11 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
       <Table>
         <TableHeader className="bg-slate-50/80">
           <TableRow className="hover:bg-transparent">
+            {selection && (
+              <TableHead className="w-px pl-4">
+                <input type="checkbox" aria-label="Select all leads on this page" checked={allPicked} onChange={() => selection.setMany(leads.map((l) => l.id), !allPicked)} className="h-4 w-4 rounded border-slate-300 text-brand" />
+              </TableHead>
+            )}
             <TableHead className="pl-4">Company</TableHead>
             <TableHead>Contact person</TableHead>
             <TableHead>Stage</TableHead>
@@ -62,7 +69,12 @@ export function LeadTable({ leads, canReassign, actions, onEdit }: Props) {
             const closed = l.stage === "closed_won" || l.stage === "closed_lost";
             const maps = mapsHref(l);
             return (
-              <TableRow key={l.id} onClick={() => router.push(dealHref(l))} className="cursor-pointer">
+              <TableRow key={l.id} onClick={() => router.push(dealHref(l))} className="cursor-pointer" data-state={selection?.ids.has(l.id) ? "selected" : undefined}>
+                {selection && (
+                  <TableCell className="pl-4" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" aria-label={`Select ${l.company.name}`} checked={selection.ids.has(l.id)} onChange={() => selection.toggle(l.id)} className="h-4 w-4 rounded border-slate-300 text-brand" />
+                  </TableCell>
+                )}
                 <TableCell className="pl-4">
                   <div className="flex max-w-[18rem] items-center gap-3">
                     <Avatar src={l.contact.photoUrl} name={l.company.name} size="sm" square />

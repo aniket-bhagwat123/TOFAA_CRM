@@ -79,6 +79,11 @@ def move_stage(lead_id: str, body: schemas.StageMove, user: CurrentUserDep):
     return ok(service.move_stage(user, lead_id, body), "Stage updated.")
 
 
+@router.post("/bulk-reassign")
+def bulk_reassign(body: schemas.BulkReassign, user: CurrentUserDep):
+    return ok(service.bulk_reassign(user, body), "Leads reassigned.")
+
+
 @router.post("/{lead_id}/reassign")
 def reassign(lead_id: str, body: schemas.Reassign, user: CurrentUserDep):
     return ok(service.reassign(user, lead_id, body), "Lead reassigned.")

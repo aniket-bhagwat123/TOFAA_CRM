@@ -53,8 +53,8 @@ function GiftRequests() {
         <FilterMenu icon={<ListFilter className="h-4 w-4" />} label="Status" value={status} onChange={setStatus}
           options={[{ value: "", label: "All statuses" }, ...GIFT_STATUSES.map((s) => ({ value: s.value, label: s.label, hint: `${countOf(s.value)} request${countOf(s.value) === 1 ? "" : "s"}` }))]} />
         {(data?.accounts.length ?? 0) > 1 && (
-          <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
-            options={[{ value: "", label: "Account" }, ...(data?.accounts ?? []).map((a) => ({ value: a.id, label: a.name }))]} />
+          <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Tenant" searchable width={300} value={companyId} onChange={setCompanyId}
+            options={[{ value: "", label: "Tenant" }, ...(data?.accounts ?? []).map((a) => ({ value: a.id, label: a.name }))]} />
         )}
         <SearchInput value={search} onChange={setSearch} placeholder="Search title, number or recipient" className="min-w-0 flex-1 sm:w-auto sm:max-w-[20rem]" />
         {(status || companyId || search) && (

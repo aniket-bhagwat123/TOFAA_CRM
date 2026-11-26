@@ -8,7 +8,8 @@ import type { Profile } from "@/types/api";
 import { ReminderCenter } from "../followups/reminder-center";
 import { Spinner } from "../ui/spinner";
 import { BottomNav } from "./bottom-nav";
-import { navFor } from "./nav";
+import { navFor, navModules } from "./nav";
+import { cn } from "@/lib/utils";
 import { SessionGuards } from "./session-guards";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -42,7 +43,8 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <Sidebar user={session.profile} collapsed={collapsed} onToggle={toggleMenu} />
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar user={session.profile} />
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 pb-24 md:p-6 md:pb-6">{children}</main>
+        {/* The phone menu is taller for roles with the CRM / OS switch */}
+        <main className={cn("min-h-0 flex-1 overflow-y-auto p-4 md:p-6 md:pb-6", navModules(session.profile.role) ? "pb-36" : "pb-24")}>{children}</main>
       </div>
       <BottomNav user={session.profile} />
       <SessionGuards />

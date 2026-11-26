@@ -110,3 +110,10 @@ class StageMove(CamelModel):
 class Reassign(CamelModel):
     owner_id: str
     note: str | None = Field(default=None, max_length=500)
+
+
+class BulkReassign(CamelModel):
+    """Several leads to one person, or shared in turn between several."""
+    lead_ids: list[str] = Field(min_length=1, max_length=200)
+    owner_ids: list[str] = Field(min_length=1, max_length=20)
+    note: str | None = Field(default=None, max_length=500)

@@ -2,7 +2,8 @@ import { BadgeCheck, BarChart3, Gift, Contact, Image as ImageIcon, Target, Build
 import type { LucideIcon } from "lucide-react";
 import type { Role } from "@/types/api";
 
-export type NavItem = { href: string; label: string; icon: LucideIcon };
+export type MenuModule = "crm" | "os";
+export type NavItem = { href: string; label: string; icon: LucideIcon; module?: MenuModule }; // no module = CRM
 
 const leads = { href: "/leads", label: "Leads", icon: KanbanSquare };
 const clients = { href: "/clients", label: "Clients", icon: Building2 };
@@ -18,9 +19,12 @@ const myAccounts = { href: "/clients", label: "My Accounts", icon: Building2 };
 const payments = { href: "/payments", label: "Payments", icon: Wallet };
 const users = { href: "/users", label: "Users", icon: Users };
 const settings = { href: "/settings", label: "Settings", icon: Settings };
-const people = { href: "/people", label: "People", icon: Contact }; // KAM and admin
-const banners = { href: "/banners", label: "Banners", icon: ImageIcon }; // KAM and admin
-const giftRequests = { href: "/gifting-requests", label: "Gift Requests", icon: Gift }; // KAM and admin
+// The OS side of the menu (KAM and admin): everything that feeds or comes from Gifting OS.
+const people: NavItem = { href: "/people", label: "People", icon: Contact, module: "os" };
+const banners: NavItem = { href: "/banners", label: "Banners", icon: ImageIcon, module: "os" };
+const giftRequests: NavItem = { href: "/gifting-requests", label: "Gift Requests", icon: Gift, module: "os" };
+const OS_PAGES = [giftRequests, people, banners];
+const NEUTRAL_PAGES = ["/profile"]; // belong to neither side: the menu stays as it was
 export const profileItem = { href: "/profile", label: "Profile", icon: User };
 
 /**
@@ -45,4 +49,18 @@ export function navFor(role: Role): NavItem[] {
     default:
       return [];
   }
+}
+
+/** The side a page belongs to, or null for a page shared by both. */
+export function moduleOfPath(path: string): MenuModule | null {
+  const under = (href: string) => path === href || path.startsWith(`${href}/`);
+  if (OS_PAGES.some((i) => under(i.href))) return "os";
+  return NEUTRAL_PAGES.some(under) ? null : "crm";
+}
+
+/** The menu split by side, or null for a role with nothing in the OS (it then sees one menu, without a switch). */
+export function navModules(role: Role): Record<MenuModule, NavItem[]> | null {
+  const items = navFor(role);
+  const os = OS_PAGES.filter((page) => items.includes(page)); // in the order of OS_PAGES: Gift Requests opens first
+  return os.length ? { crm: items.filter((i) => i.module !== "os"), os } : null;
 }

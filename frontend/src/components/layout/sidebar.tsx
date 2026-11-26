@@ -7,7 +7,8 @@ import { useApi } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import type { Profile } from "@/types/api";
 import type { FollowUpCounts } from "@/types/crm";
-import { navFor } from "./nav";
+import { ModuleSwitch, useMenuModule } from "./module-switch";
+import { navFor, navModules } from "./nav";
 
 const FOLLOW_UPS = "/follow-ups";
 const REFRESH_MS = 60_000;
@@ -42,8 +43,11 @@ type Props = { user: Profile; collapsed: boolean; onToggle: () => void };
  */
 export function Sidebar({ user, collapsed, onToggle }: Props) {
   const path = usePathname();
-  const items = navFor(user.role); // Profile lives in the user menu (top right)
-  const overdue = useOverdueCount(items.some((i) => i.href === FOLLOW_UPS), path);
+  const all = navFor(user.role); // Profile lives in the user menu (top right)
+  const modules = navModules(user.role);
+  const side = useMenuModule(path);
+  const items = modules ? modules[side] : all;
+  const overdue = useOverdueCount(all.some((i) => i.href === FOLLOW_UPS), path); // counted on both sides
   const [tip, setTip] = useState<{ text: string; top: number; left: number } | null>(null);
   const showTip = (text: string) => (e: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>) => {
     if (!collapsed) return;
@@ -66,7 +70,19 @@ export function Sidebar({ user, collapsed, onToggle }: Props) {
         </div>
       </div>
 
-      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-2" aria-label="Main" onScroll={hideTip}>
+      {modules && (
+        <ModuleSwitch
+          value={side}
+          home={{ crm: modules.crm[0], os: modules.os[0] }}
+          alert={{ crm: overdue > 0 ? `${overdue} overdue follow-ups` : undefined }}
+          collapsed={collapsed}
+          onTip={showTip}
+          onTipEnd={hideTip}
+          className="mx-3 mt-1 shrink-0"
+        />
+      )}
+
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain px-3 pb-4 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Main" onScroll={hideTip}>
         {items.map(({ href, label, icon: Icon }) => {
           const active = path.startsWith(href);
           const badge = href === FOLLOW_UPS && overdue > 0 ? (overdue > 99 ? "99+" : String(overdue)) : null;

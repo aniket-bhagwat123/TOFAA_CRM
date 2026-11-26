@@ -149,8 +149,8 @@ export default function PeoplePage() {
         {tab === "groups" && (
           <div className="flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto">
             {accounts.length > 1 && (
-              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
-                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
+              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Tenant" searchable width={300} value={companyId} onChange={setCompanyId}
+                options={[{ value: "", label: "Tenant" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
             )}
             <SearchInput value={groupSearch} onChange={setGroupSearch} placeholder="Search groups" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />
             {(companyId || groupSearch) && (
@@ -172,8 +172,8 @@ export default function PeoplePage() {
           {/* Row 2: more filters, search and Clear all, in one card (the count is in the footer under the table) */}
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200/80 bg-white px-3 py-2.5 shadow-card">
             {accounts.length > 1 && (
-              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Account" searchable width={300} value={companyId} onChange={setCompanyId}
-                options={[{ value: "", label: "Account" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
+              <FilterMenu icon={<Building2 className="h-4 w-4" />} label="Tenant" searchable width={300} value={companyId} onChange={setCompanyId}
+                options={[{ value: "", label: "Tenant" }, ...accounts.map((a) => ({ value: a.id, label: a.name }))]} />
             )}
             <FilterMenu icon={<Users className="h-4 w-4" />} label="Group" searchable width={280} value={groupId} onChange={setGroupId}
               options={[{ value: "", label: "Group" }, ...(groups.data ?? []).map((g) => ({

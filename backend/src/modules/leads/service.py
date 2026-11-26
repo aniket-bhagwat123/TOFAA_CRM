@@ -543,6 +543,56 @@ def reassign(user: Profile, lead_id: str, body: schemas.Reassign) -> dict:
     return {**lead, "owner_id": body.owner_id, "owner": {"id": body.owner_id, "full_name": target[0]["full_name"]}}
 
 
+def share_out(lead_ids: list[str], owner_ids: list[str]) -> dict[str, str]:
+    """Deal the leads out in turn, so the shares differ by at most one: lead id -> new owner id."""
+    return {lead_id: owner_ids[i % len(owner_ids)] for i, lead_id in enumerate(lead_ids)}
+
+
+def bulk_reassign(user: Profile, body: schemas.BulkReassign) -> dict:
+    """Managers hand many new-business leads to one or several people, with the same rules as a single reassign.
+    Everyone is checked before anything is written."""
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
+        raise ForbiddenError("Only managers can reassign leads.")
+    db = get_service_client()
+    ids = list(dict.fromkeys(body.lead_ids))
+    owners = list(dict.fromkeys(body.owner_ids))
+    people = {p["id"]: p for p in db.table("profiles").select("id,full_name,role,is_active").in_("id", owners).execute().data}
+    visible = visible_owner_ids(user)
+    for owner in owners:
+        if visible is not None and owner not in visible:
+            raise ForbiddenError("You can only assign to people on your team.")
+        target = people.get(owner)
+        if not target or not target["is_active"] or target["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value):
+            raise AppError("Pick active sales executives or managers.", status_code=422)
+    found: dict[str, dict] = {}
+    for i in range(0, len(ids), 100):
+        q = db.table("leads").select("id,owner_id").in_("id", ids[i : i + 100]).eq("pipeline", "new_business")
+        found.update({r["id"]: r for r in live(q, "leads").execute().data})
+    for lead in found.values():
+        assert_can_access_lead(user, lead)
+    present = [i for i in ids if i in found]  # deleted meanwhile (or not a sales lead): skipped and counted
+    plan = share_out(present, owners)
+    moves = {lead_id: owner for lead_id, owner in plan.items() if found[lead_id]["owner_id"] != owner}
+    now = now_ist().isoformat()
+    for owner in owners:
+        mine = [lead_id for lead_id, to in moves.items() if to == owner]
+        for i in range(0, len(mine), 100):
+            part = mine[i : i + 100]
+            par(
+                lambda: db.table("leads").update({"owner_id": owner, "updated_at": now, "last_activity_at": now}).in_("id", part).execute(),
+                lambda: db.table("tasks").update({"owner_id": owner}).in_("lead_id", part).is_("done_at", "null").execute(),
+                lambda: db.table("meetings").update({"owner_id": owner}).in_("lead_id", part).eq("status", "scheduled").execute(),
+                lambda: db.table("activities").insert([
+                    {"lead_id": lead_id, "actor_id": user.id, "kind": "reassign", "outcome": None, "note": body.note,
+                     "meta": {"from": found[lead_id]["owner_id"], "to": owner, "toName": people[owner]["full_name"]}}
+                    for lead_id in part
+                ]).execute(),
+            )
+    for lead_id, owner in moves.items():
+        write_audit(user.id, "reassign", "leads", lead_id, {"from": found[lead_id]["owner_id"], "to": owner, "bulk": True})
+    return {"reassigned": len(moves), "unchanged": len(present) - len(moves), "missing": len(ids) - len(present)}
+
+
 # --- client photo ---------------------------------------------------------------------------------------
 
 def attach_photos(rows: list[dict]) -> list[dict]:

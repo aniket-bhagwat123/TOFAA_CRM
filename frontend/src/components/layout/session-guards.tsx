@@ -9,8 +9,10 @@ import { apiClient } from "@/services/api-client";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { AppNotification } from "@/types/crm";
 
-const DESKTOP_IDLE_MIN = 30; // PRD default for desktop
-const MOBILE_IDLE_MIN = 12 * 60; // longer on mobile
+const DESKTOP_IDLE_MIN = 12 * 60;
+const MOBILE_IDLE_MIN = 12 * 60;
+const ACTIVITY_KEY = "tofaa-last-activity"; // shared by every open tab
+const SAVE_EVERY_MS = 10_000;
 const POLL_MS = 60_000;
 
 /** Auto-logout after inactivity, plus in-app reminders (browser notification if allowed). */
@@ -21,13 +23,22 @@ export function SessionGuards() {
   const last = useRef(Date.now());
 
   useEffect(() => {
-    const touch = () => (last.current = Date.now());
+    // Activity in any tab counts for all of them, so a tab left in the background never signs a working person out.
+    let saved = 0;
+    const touch = () => {
+      last.current = Date.now();
+      if (last.current - saved < SAVE_EVERY_MS) return;
+      saved = last.current;
+      try { localStorage.setItem(ACTIVITY_KEY, String(saved)); } catch { /* storage unavailable: this tab counts alone */ }
+    };
+    const elsewhere = () => { try { return Number(localStorage.getItem(ACTIVITY_KEY)) || 0; } catch { return 0; } };
+    touch(); // opening the app is activity
     const events = ["pointerdown", "keydown", "scroll", "touchstart"] as const;
     events.forEach((e) => window.addEventListener(e, touch, { passive: true }));
     const timer = setInterval(async () => {
       const mobile = window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 768;
       const limit = (mobile ? MOBILE_IDLE_MIN : DESKTOP_IDLE_MIN) * 60_000;
-      if (Date.now() - last.current > limit) {
+      if (Date.now() - Math.max(last.current, elsewhere()) > limit) {
         await logout();
         dispatch(clearSession());
         toast.info("Signed out after inactivity.");
