@@ -98,6 +98,12 @@ def apply_payment(req: dict, paid_total: Decimal, source: str, actor_id: str | N
         on_deal_won(lead["id"])  # the first paid deal makes the company a client
     except Exception:  # noqa: BLE001 - the payment is recorded; client details can be fixed by hand
         log.exception("could not mark the company as a client")
+    try:
+        from src.modules.orders.flow import on_payment
+
+        on_payment(lead["id"])  # the order takes its copy of what was agreed
+    except Exception:  # noqa: BLE001 - the payment is recorded; the order fills itself in when it is opened
+        log.exception("could not copy the items onto the order")
     write_audit(actor_id or "", "payment_confirmed", "payment_requests", req["id"], {"invoice": req["invoice_number"], "amount": float(paid_total), "source": source})
     return {"status": status, "amountPaid": float(paid_total)}
 

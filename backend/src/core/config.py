@@ -76,6 +76,8 @@ class Settings(BaseSettings):
     # Order Management System. Empty = no handoff: the KAM moves confirmed requests on by hand.
     OMS_API_URL: str = ""
     OMS_API_KEY: str = ""
+    # The key OMS sends (X-API-Key) to call this CRM's order APIs. At least 32 characters; empty = those APIs refuse all.
+    OMS_INBOUND_KEY: str = ""
     OMS_WEBHOOK_SECRET: str = ""  # OMS signs its status updates with this; empty = reject them all
 
     # Client management

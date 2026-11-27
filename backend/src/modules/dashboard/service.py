@@ -16,6 +16,7 @@ from src.core.errors import ForbiddenError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
 from src.core.soft_delete import live
+from src.modules.orders import flow as order_flow
 from src.modules.auth.schemas import Profile, Role
 from src.modules.leads.stages import CLOSED
 from src.modules.leads.value import decimal_value
@@ -57,6 +58,8 @@ def _follow_up_counts(owner_ids: list[str]) -> dict:
 
 def _order_counts(company_ids: list[str] | None) -> dict:
     q = get_service_client().table("orders").select("status")
+    if order_flow.upgraded():
+        q = q.is_("deleted_at", "null")
     if company_ids is not None:
         q = q.in_("company_id", company_ids or [NOWHERE])
     counts = {s: 0 for s in ORDER_STEPS}

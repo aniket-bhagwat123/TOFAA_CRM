@@ -117,9 +117,13 @@ def _order_for(lead: dict) -> dict:
     try:
         rows = db.table("orders").select("*").eq("lead_id", lead["id"]).limit(1).execute().data
         if rows:
+            if rows[0].get("deleted_at"):
+                raise NotFoundError("This order was deleted.")
             return rows[0]
         amount = lead.get("paid_amount") or lead.get("quote_amount") or lead.get("estimate_amount")
         return db.table("orders").insert({"lead_id": lead["id"], "company_id": lead.get("company_id"), "amount": amount}).execute().data[0]
+    except NotFoundError:
+        raise
     except Exception as exc:
         if _missing(exc):
             raise AppError(NOT_READY, status_code=503) from exc
