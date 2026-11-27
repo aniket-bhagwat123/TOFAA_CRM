@@ -1,4 +1,5 @@
 "use client";
+import { CALL_TONE, CONTACT_ICON } from "@/lib/contact-styles";
 import { AlertTriangle, CalendarHeart, ClipboardCheck, FolderPlus, MessageCircle, Phone, PhoneIncoming, Plus, Repeat, Settings2, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,7 +24,7 @@ import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { followUpLabel, formatDate, formatTime, openWhatsApp, telHref } from "@/lib/format";
 import { inrShort } from "@/lib/money";
-import { isManager } from "@/lib/roles";
+import { canManageClients } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
@@ -31,7 +32,7 @@ import type { ClientDetail, Lead, Quotation } from "@/types/crm";
 
 const Stat = ({ label, value }: { label: string; value: string }) => (
   <div className="rounded-xl bg-slate-50 px-3 py-2.5">
-    <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="text-[12px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
     <div className="text-base font-semibold text-slate-900">{value}</div>
   </div>
 );
@@ -107,7 +108,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
   };
 
   const action = (label: string, Icon: typeof Phone, onClick: () => void, primaryStyle = false, disabled = false) => (
-    <Button variant={primaryStyle ? "primary" : "secondary"} onClick={onClick} disabled={disabled} className="flex-col gap-1 py-3 text-xs sm:text-sm"><Icon className="h-5 w-5" />{label}</Button>
+    <Button variant={primaryStyle ? "primary" : "secondary"} onClick={onClick} disabled={disabled} className={cn("flex-col gap-1 py-3 text-xs sm:text-sm", Icon === Phone && CALL_TONE)}><Icon className="h-5 w-5" />{label}</Button>
   );
 
   return (
@@ -117,18 +118,19 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
         <Card className="space-y-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-start gap-3">
-              <Avatar src={primary?.photoUrl} name={client.name} size="lg" square />
+              <Avatar src={client.logoUrl ?? primary?.photoUrl} name={client.name} size="lg" square className={client.logoUrl ? "bg-white object-contain ring-1 ring-slate-200" : undefined} />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <h1 className="truncate text-xl font-semibold">{client.name}</h1>
-                  <span className={cn("rounded-md px-1.5 py-0.5 text-[11px] font-bold ring-1", TIER_TONE[client.tier])} title={client.tierIsManual ? "Set by a manager" : "From the last 12 months of revenue"}>Tier {client.tier}</span>
-                  {client.status === "dormant" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">Dormant</span>}
+                  {client.giftingInactive && <span className="shrink-0 rounded-full bg-amber-50 px-2 py-0.5 text-[12px] font-semibold text-amber-800">Inactive in Gifting OS</span>}
+                  <span className={cn("rounded-md px-1.5 py-0.5 text-[12px] font-bold ring-1", TIER_TONE[client.tier])} title={client.tierIsManual ? "Set by hand" : "From the last 12 months of revenue"}>Tier {client.tier}</span>
+                  {client.status === "dormant" && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[12px] font-medium text-red-600">Dormant</span>}
                 </div>
                 <p className="text-sm text-slate-500">{primary ? `${primary.name}${primary.designation ? `, ${primary.designation}` : ""}` : "No contact"}{client.city ? ` · ${client.city}` : ""}</p>
-                <p className="text-xs text-slate-400">Client since {client.clientSince ? formatDate(client.clientSince) : "—"} · Owner {client.owner?.fullName ?? "—"}</p>
+                <p className="text-xs text-slate-400">Client since {client.clientSince ? formatDate(client.clientSince) : "—"} · Account owner (TOFAA) {client.owner?.fullName ?? "—"}</p>
               </div>
             </div>
-            {role && isManager(role) && (
+            {role && canManageClients(role) && (
               <div className="flex shrink-0 items-center gap-1">
                 <Button variant="ghost" className="min-h-9 px-2.5" onClick={() => setManage(true)} aria-label="Manage client" title="Manage client"><Settings2 className="h-4 w-4" /></Button>
                 <Button variant="ghost" className="min-h-9 px-2.5 text-red-600 hover:bg-red-50" onClick={() => setDeletingClient(true)} aria-label="Delete client" title="Delete client (only if added by mistake)"><Trash2 className="h-4 w-4" /></Button>
@@ -173,7 +175,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
         {/* The latest 5 here; the full history is on Activity, filtered to this client. */}
         <Card>
           <div className="mb-3 flex items-center justify-between gap-2">
-            <h2 className="text-[13px] font-semibold text-slate-700">Timeline <span className="ml-1 font-normal text-slate-400">latest {Math.min(5, timeline.length)}</span></h2>
+            <h2 className="text-xs font-semibold text-slate-700">Timeline <span className="ml-1 font-normal text-slate-400">latest {Math.min(5, timeline.length)}</span></h2>
             {timeline.length > 5 && (
               <Link href={`/activity?client=${id}`} className="rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand-soft">View all activity</Link>
             )}
@@ -189,7 +191,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
 
       {/* right column */}
       <div className="space-y-4">
-        {(role === "admin" || role === "kam") && <GiftingOsCard companyId={id} />}
+        {(role === "admin" || role === "sales_manager" || role === "kam") && <GiftingOsCard companyId={id} onChanged={reload} />}
         <Card className="space-y-3 p-4">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><CalendarHeart className="h-4 w-4 text-indigo-500" /> Occasions</h2>
@@ -247,7 +249,7 @@ export default function ClientPage({ params }: { params: Promise<{ id: string }>
             <div key={c.id} className="flex items-center gap-2.5">
               <Avatar src={c.photoUrl} name={c.name} size="sm" />
               <div className="min-w-0 flex-1 text-sm"><div className="truncate font-medium">{c.name}</div><div className="truncate text-xs text-slate-400">{c.designation ?? c.phone ?? c.email}</div></div>
-              {c.phone && <button type="button" onClick={() => callClient({ name: c.name, phone: c.phone })} className="pressable rounded-full p-1.5 text-emerald-600 hover:bg-emerald-50" aria-label={`Call ${c.name}`}><Phone className="h-4 w-4" /></button>}
+              {c.phone && <button type="button" onClick={() => callClient({ name: c.name, phone: c.phone })} className={cn(CONTACT_ICON, CALL_TONE)} aria-label={`Call ${c.name}`}><Phone className="h-4 w-4" /></button>}
             </div>
           ))}
         </Card>

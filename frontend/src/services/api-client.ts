@@ -1,4 +1,5 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
+import { followsPickedClient, pickedClient } from "@/lib/selected-client";
 import { loadSession, saveSession } from "@/lib/session";
 import { ENDPOINTS } from "./endpoints";
 
@@ -11,6 +12,8 @@ type Retryable = InternalAxiosRequestConfig & { _retried?: boolean; _timeoutRetr
 apiClient.interceptors.request.use((config) => {
   const token = typeof window !== "undefined" ? loadSession()?.tokens.accessToken : null;
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  const client = pickedClient();
+  if (client && followsPickedClient(config.url ?? "")) config.headers["X-Client-Id"] = client.id;
   return config;
 });
 

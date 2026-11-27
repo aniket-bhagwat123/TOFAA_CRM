@@ -69,7 +69,7 @@ def test_erp_bad_payloads_are_rejected(erp, payload):
 
 def test_only_finance_or_admin_can_confirm(monkeypatch):
     monkeypatch.setattr(service.settings, "PAYMENT_FALLBACK_ENABLED", True)
-    for role in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER, Role.KAM):
+    for role in (Role.KAM, Role.SALES_MANAGER, Role.KAM):
         with pytest.raises(ForbiddenError):
             service.confirm(Profile(id="x", role=role), "r1", None)
 
@@ -81,7 +81,7 @@ def test_the_fallback_button_can_be_switched_off(monkeypatch):
 
 
 def test_only_finance_or_admin_see_payments():
-    for role in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER):
+    for role in (Role.KAM, Role.SALES_MANAGER):
         with pytest.raises(ForbiddenError):
             service.list_requests(Profile(id="x", role=role), None)
 

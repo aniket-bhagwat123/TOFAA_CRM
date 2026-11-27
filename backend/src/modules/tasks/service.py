@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from src.core import app_settings, cache
 from src.core.access import can_access_owner, require_lead_role
+from src.core.audit import write_audit
 from src.core.dates import IST, now_ist, today_ist
 from src.core.errors import AppError, ForbiddenError, NotFoundError
 from src.core.parallel import par
@@ -174,7 +175,10 @@ def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None,
         errors.append({"field": "dueDate", "message": "Pick today or a later date."})
     if errors:
         raise AppError("Some details are missing.", {"errors": errors}, 422)
-    due, due_at = with_time(due, due_at)  # "In 2 hrs" late in the day lands on the next working morning
+    # A moved card stays on the day and time the user picked, weekend or holiday included. A snooze ("In 2 hrs" late
+    # in the day) still lands on the next working morning.
+    if not (reason == "reschedule" and due_at):
+        due, due_at = with_time(due, due_at)
 
     old_at = task.get("due_at") or f"{task['due_date']}T23:59:59+05:30"
     new_at = due_at.isoformat() if due_at else f"{due.isoformat()}T23:59:59+05:30"
@@ -203,6 +207,32 @@ def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None,
                 "/follow-ups",
             )
     return {"id": task_id, "dueDate": due.isoformat(), "dueAt": due_at.isoformat() if due_at else None, "snoozeCount": count}
+
+
+def delete_task(user: Profile, task_id: str) -> dict:
+    """Take a follow-up off the board (added by mistake). The row is kept, closed as "cancelled", so it is not counted
+    as work done. The lead's next follow-up date moves to its next open one."""
+    db = get_service_client()
+    rows = db.table("tasks").select("id,lead_id,owner_id,kind,title,done_at").eq("id", task_id).limit(1).execute().data
+    if not rows:
+        raise NotFoundError("Follow-up not found.")
+    task = rows[0]
+    if not can_access_owner(user, task.get("owner_id")):
+        raise ForbiddenError()
+    if task.get("done_at"):
+        raise AppError("This follow-up is already done.", status_code=409)
+    lead_id = task.get("lead_id")
+    if task.get("kind") == "meeting" and lead_id:
+        meeting = db.table("meetings").select("id").eq("lead_id", lead_id).eq("status", "scheduled").limit(1).execute().data
+        if meeting:
+            raise AppError("This follow-up belongs to a meeting. Cancel the meeting on the lead instead.", status_code=409)
+    db.table("tasks").update({"done_at": now_ist().isoformat(), "outcome": "cancelled"}).eq("id", task_id).execute()
+    if lead_id:
+        left = db.table("tasks").select("due_date").eq("lead_id", lead_id).is_("done_at", "null").order("due_date").limit(1).execute().data
+        db.table("leads").update({"next_follow_up": left[0]["due_date"] if left else None}).eq("id", lead_id).execute()
+        add_activity(lead_id, user.id, "task", outcome="cancelled", note=f"Follow-up deleted: {task.get('title') or 'Follow-up'}")
+    write_audit(user.id, "delete", "tasks", task_id, {"lead": lead_id, "title": task.get("title")})
+    return {"id": task_id, "deleted": True}
 
 
 def create_task(user: Profile, lead_id: str, due: date, title: str | None, kind: str = "follow_up", due_at: datetime | None = None) -> dict:

@@ -1,15 +1,16 @@
 "use client";
-import { KeyRound, Pencil, Target, UserCheck, UserPlus, UserX, X } from "lucide-react";
+import { KeyRound, Pencil, Target, Trash2, UserCheck, UserPlus, UserX, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useDelete } from "@/components/ui/use-delete";
 import { TargetsModal } from "@/components/crm/targets-modal";
 import { UserSheet, type UserRow } from "@/components/crm/user-sheet";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -18,12 +19,12 @@ import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
 import { ROLE_LABEL, type Role } from "@/types/api";
+import { usePaged } from "@/components/ui/use-paged";
 
-const ROLES: Role[] = ["sales_executive", "sales_manager", "finance", "kam", "admin"];
+const ROLES: Role[] = ["kam", "sales_manager", "finance", "admin"];
 const ROLE_TONE: Record<Role, string> = {
   admin: "bg-slate-900 text-white",
   sales_manager: "bg-brand-soft text-brand",
-  sales_executive: "bg-sky-50 text-sky-700",
   finance: "bg-emerald-50 text-emerald-700",
   kam: "bg-amber-50 text-amber-700",
 };
@@ -36,6 +37,7 @@ export default function UsersPage() {
   const router = useRouter();
   const me = useAppSelector((s) => s.auth.session?.profile);
   const users = useApi<UserRow[]>(me?.role === "admin" ? "/users" : null);
+  const remove = useDelete(() => void users.reload());
   const [search, setSearch] = useState("");
   const [role, setRole] = useState("");
   const [status, setStatus] = useState<"" | "active" | "inactive">("");
@@ -54,6 +56,7 @@ export default function UsersPage() {
       (!role || u.role === role) &&
       (!status || (status === "active" ? u.isActive : !u.isActive)));
   }, [all, search, role, status]);
+  const paged = usePaged(rows, ["user", "users"], [search, role, status].join("|"));
   const activeCount = all.filter((u) => u.isActive).length;
   const filtering = !!(search || role || status);
 
@@ -73,7 +76,7 @@ export default function UsersPage() {
     <div className="flex h-full min-h-0 flex-col gap-4">
       <PageHeader
         title="Users"
-        description="People, roles, and each executive's monthly target and discount limit."
+        description="People, roles, and each KAM's monthly target and discount limit."
         actions={<Button variant="secondary" onClick={() => setTargetsOpen(true)}><Target className="h-4 w-4" /> Monthly targets</Button>}
       />
 
@@ -100,7 +103,7 @@ export default function UsersPage() {
       </div>
 
       {users.loading && !users.data ? (
-        <div className="flex flex-1 items-center justify-center"><Spinner /></div>
+        <TableSkeleton columns={6} rows={8} />
       ) : users.error && !users.data ? (
         <StateView kind="error" message={users.error} onRetry={() => void users.reload()} />
       ) : rows.length === 0 ? (
@@ -125,7 +128,7 @@ export default function UsersPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {rows.map((u) => {
+                {paged.rows.map((u) => {
                   const self = u.id === me.id;
                   return (
                     <TableRow key={u.id} className={cn(!u.isActive && "bg-slate-50/60")}>
@@ -140,7 +143,7 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell><span className="t-body tabular-nums text-slate-700">{shownPhone(u.phone)}</span></TableCell>
                       <TableCell><span className={cn("whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium", ROLE_TONE[u.role])}>{ROLE_LABEL[u.role]}</span></TableCell>
-                      <TableCell><span className="t-body block max-w-[10rem] truncate text-slate-700">{u.role === "sales_executive" ? nameOf(u.managerId) : "—"}</span></TableCell>
+                      <TableCell><span className="t-body block max-w-[10rem] truncate text-slate-700">{u.role === "kam" ? nameOf(u.managerId) : "—"}</span></TableCell>
                       <TableCell>
                         <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium", u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-200/70 text-slate-600")}>
                           <span className={cn("h-1.5 w-1.5 rounded-full", u.isActive ? "bg-emerald-500" : "bg-slate-400")} />
@@ -154,6 +157,12 @@ export default function UsersPage() {
                           </Tooltip>
                           <Tooltip label="Set a new password">
                             <button type="button" aria-label={`Set a new password for ${u.fullName}`} onClick={() => setSheet({ user: u, password: true })} className={iconButton}><KeyRound className="h-4 w-4" /></button>
+                          </Tooltip>
+                          <Tooltip label={self ? "You cannot delete yourself" : "Delete"}>
+                            <button type="button" disabled={self} aria-label={`Delete ${u.fullName}`} className={cn(iconButton, "hover:text-red-600 disabled:pointer-events-none disabled:opacity-35")}
+                              onClick={() => remove.ask({ path: `/users/${u.id}`, title: `Delete ${u.fullName || "this user"}?`, done: "User deleted", message: "Only an account with no work or history can be deleted. Otherwise, deactivate it. This cannot be undone." })}>
+                              <Trash2 className="h-4 w-4" />
+                            </button>
                           </Tooltip>
                           <Tooltip label={self ? "You cannot switch yourself off" : u.isActive ? "Deactivate" : "Activate"}>
                             <button
@@ -174,6 +183,7 @@ export default function UsersPage() {
               </TableBody>
             </Table>
           </div>
+          {paged.footer && <div className="pt-3">{paged.footer}</div>}
         </div>
       )}
 
@@ -186,6 +196,7 @@ export default function UsersPage() {
         onClose={() => setSheet(null)}
         onDone={() => void users.reload()}
       />
+      {remove.dialog}
       <TargetsModal open={targetsOpen} onClose={() => setTargetsOpen(false)} onSaved={() => undefined} />
     </div>
   );

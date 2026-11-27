@@ -49,7 +49,7 @@ export function RequestActions({ requestId, allowed, onDone }: { requestId: stri
 
   if (!allowed.length) return null;
   return (
-    <section className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+    <section className="space-y-3 text-sm">
       {!chosen ? (
         <div className="flex flex-wrap gap-2">
           {allowed.map((a, i) => <Button key={a} variant={a === "reject" ? "secondary" : i ? "secondary" : "primary"} className={a === "reject" ? "text-red-600" : undefined} onClick={() => pick(a)}>{ACTIONS[a].label}</Button>)}

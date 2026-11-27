@@ -9,6 +9,7 @@ import logging
 import re
 from typing import Literal
 
+from src.core.selected_client import selected_client
 from src.core import cache
 from src.core.dates import now_ist, today_ist
 from src.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
@@ -22,7 +23,7 @@ from src.modules.auth.schemas import Profile, Role
 from src.modules.people import rules, schemas
 
 log = logging.getLogger(__name__)
-ROLES = (Role.ADMIN, Role.KAM)
+ROLES = (Role.ADMIN, Role.SALES_MANAGER, Role.KAM)
 NOT_READY = "People is not set up yet. An admin needs to apply the database migration 20260120000000_people_and_banners.sql, then try again."
 PERSON = "*, company:companies(id,name)"
 CHUNK = 150          # ids per request for bulk work
@@ -50,23 +51,34 @@ def uid(user: Profile) -> str | None:
 
 def require_role(user: Profile) -> None:
     if user.role not in ROLES:
-        raise ForbiddenError("People is for KAM and admin.")
+        raise ForbiddenError("People is for KAMs, sales managers and admins.")
+
+
+def require_delete(user: Profile) -> None:
+    """Deleting people and groups is for sales managers and admins: a deleted person leaves Gifting OS too, so a KAM
+    archives instead. (Someone signed in to Gifting OS acts there under its own rules.)"""
+    require_role(user)
+    if user.role == Role.KAM and not isinstance(user, ExternalActor):
+        raise ForbiddenError("Only a sales manager or an admin can delete. Archive instead.")
 
 
 def company_scope(user: Profile) -> list[str] | None:
-    """Client accounts the user may work with: None means all (admin); a KAM, the accounts they own; someone from
-    Gifting OS, only their own client's account."""
+    """Client accounts the user may work with: None means all (admin, sales manager); a KAM, the accounts they own,
+    or just the one picked in the header; someone from Gifting OS, only their own client's account."""
     require_role(user)
     if isinstance(user, ExternalActor):
         return [user.company_id]
-    if user.role == Role.ADMIN:
-        return None
+    if user.role in (Role.ADMIN, Role.SALES_MANAGER):
+        picked = selected_client(user)  # an admin's header pick
+        return [picked] if picked else None
 
     def load() -> list[str]:
         q = get_service_client().table("companies").select("id").eq("account_owner_id", user.id).not_.is_("client_since", "null")
         return [r["id"] for r in live(q, "companies").limit(5000).execute().data]
 
-    return cache.memo("people-scope", user.id, None, 30, load)
+    owned = cache.memo("people-scope", user.id, None, 30, load)
+    picked = selected_client(user)
+    return [c for c in owned if c == picked] if picked else owned
 
 
 def client_account(user: Profile, company_id: str) -> dict:
@@ -389,6 +401,7 @@ def update(user: Profile, recipient_id: str, body: schemas.RecipientUpdate) -> d
 
 def delete(user: Profile, recipient_id: str) -> None:
     """Soft delete: hidden everywhere, kept in the database, can be restored."""
+    require_delete(user)
     person_row(user, recipient_id)
     get_service_client().table("recipients").update({"deleted_at": now_ist().isoformat(), "updated_by": uid(user)}).eq("id", recipient_id).execute()
     record(user, [recipient_id], "DELETE")
@@ -421,6 +434,7 @@ def _owned_ids(user: Profile, ids: list[str], *, include_deleted: bool = False) 
 
 
 def bulk_delete(user: Profile, ids: list[str]) -> dict:
+    require_delete(user)
     ok_ids = _owned_ids(user, ids)
     now = now_ist().isoformat()
     for i in range(0, len(ok_ids), CHUNK):

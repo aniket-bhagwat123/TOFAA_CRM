@@ -13,6 +13,7 @@ import threading
 import time
 from typing import Any, Callable
 
+from src.core import selected_client
 from fastapi import FastAPI, Request
 
 _lock = threading.RLock()
@@ -72,7 +73,8 @@ def bump() -> None:
 
 
 def memo(name: str, user_id: str, params: Any, ttl: float, loader: Callable[[], Any]) -> Any:
-    key = f"memo:{_version}:{name}:{user_id}:{json.dumps(params, sort_keys=True, default=str)}"
+    # The picked client is part of the key: one client's cached rows must never answer for another.
+    key = f"memo:{_version}:{name}:{user_id}:{selected_client.current()}:{json.dumps(params, sort_keys=True, default=str)}"
     hit, value = _get(key)
     if hit:
         return value

@@ -62,4 +62,5 @@ export type ImportResult = { total: number; created: number; skipped: { row: num
 export type Banner = {
   id: string; audience: "ALL" | "KAM" | "ADMIN"; title?: string | null; imageUrl?: string | null; sortOrder: number; isActive: boolean;
   startsOn?: string | null; endsOn?: string | null; live?: boolean; createdAt: string;
+  companyIds?: string[]; clients?: { id: string; name: string }[]; // none = every client
 };

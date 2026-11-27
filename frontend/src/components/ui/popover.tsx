@@ -20,7 +20,9 @@ export function Popover({ anchor, open, onClose, children, width = 300, label }:
     const below = window.innerHeight - a.bottom;
     const flip = below < h + 12 && a.top > below;
     const left = Math.min(Math.max(8, a.left), window.innerWidth - Math.max(width, a.width) - 8);
-    setPos({ top: flip ? a.top - h - 8 : a.bottom + 8, left, origin: flip ? "bottom left" : "top left" });
+    // On a short screen neither side may have room: keep the whole panel on screen, over the trigger if it must.
+    const top = Math.max(8, Math.min(flip ? a.top - h - 8 : a.bottom + 8, window.innerHeight - h - 8));
+    setPos({ top, left, origin: flip ? "bottom left" : "top left" });
   }, [anchor, width]);
 
   useLayoutEffect(() => {
@@ -56,7 +58,7 @@ export function Popover({ anchor, open, onClose, children, width = 300, label }:
       role="dialog"
       aria-label={label}
       style={{ position: "fixed", top: pos?.top ?? -9999, left: pos?.left ?? -9999, width, transformOrigin: pos?.origin, visibility: pos ? "visible" : "hidden" }}
-      className="animate-pop z-[70] rounded-2xl border border-slate-200/80 bg-white p-3 shadow-float"
+      className="animate-pop z-[70] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200/80 bg-white p-3 shadow-float"
     >
       {children}
     </div>,

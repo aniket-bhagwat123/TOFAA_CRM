@@ -1,4 +1,4 @@
-"""Quotations: build from requirement packages, check the discount against the executive's limit, ask for approval when it is
+"""Quotations: build from requirement packages, check the discount against the KAM's limit, ask for approval when it is
 too high, make the PDF, and send it. Sending is the action that moves the lead to Quotation Sent."""
 import logging
 from datetime import datetime
@@ -43,7 +43,7 @@ def totals(items: list[tuple[Decimal, Decimal]], discount_pct: Decimal) -> tuple
 
 
 def status_for(creator_role: Role, discount_pct: Decimal, limit: Decimal) -> str:
-    """Managers and admins can quote any discount. An executive's discount must be within their own limit."""
+    """Managers and admins can quote any discount. A KAM's discount must be within their own limit."""
     if creator_role in (Role.SALES_MANAGER, Role.ADMIN):
         return "approved"
     return "ready" if discount_pct <= limit else "pending_approval"
@@ -292,6 +292,18 @@ def _load(user: Profile, quotation_id: str) -> tuple[dict, dict, list[dict], lis
         lambda: _packages_for([quotation_id]),
     )
     return q, lead, items, packages
+
+
+def delete_quotation(user: Profile, quotation_id: str) -> dict:
+    """Remove a quotation that never reached the client. A sent one is part of the client's history and stays."""
+    q, _, _, _ = _load(user, quotation_id)
+    if q["status"] == "sent" or q.get("sent_at"):
+        raise ConflictError("This quotation was sent to the client, so it is kept. Make a new version instead.")
+    get_service_client().table("quotations").delete().eq("id", quotation_id).execute()
+    number = quote_number(q["lead_id"], q["version"])
+    add_activity(q["lead_id"], user.id, "quotation", outcome="deleted", note=f"Quotation v{q['version']} deleted")
+    write_audit(user.id, "delete", "quotations", quotation_id, {"number": number, "total": q.get("total"), "status": q["status"]})
+    return {"id": quotation_id, "deleted": True}
 
 
 def make_pdf(user: Profile, quotation_id: str) -> tuple[bytes, str]:

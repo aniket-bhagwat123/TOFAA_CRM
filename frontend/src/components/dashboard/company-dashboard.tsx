@@ -22,7 +22,7 @@ export type CompanyData = {
   orders?: Record<"new" | "production" | "quality_check" | "dispatched" | "delivered", number> | null;
 };
 
-const ROLE: Record<string, string> = { sales_executive: "Executive", sales_manager: "Manager", admin: "Admin", kam: "KAM" };
+const ROLE: Record<string, string> = { sales_manager: "Manager", admin: "Admin", kam: "KAM" };
 const ORDER_LABEL: [keyof NonNullable<CompanyData["orders"]>, string][] = [
   ["new", "Not started"], ["production", "Production"], ["quality_check", "Quality check"], ["dispatched", "Dispatched"], ["delivered", "Delivered"],
 ];
@@ -55,7 +55,7 @@ export function CompanyDashboard({ d, admin }: { d: CompanyData; admin: boolean 
                   ["This month", inrShort(d.payments.confirmedThisMonth.amount), `${d.payments.confirmedThisMonth.count} received`, "text-emerald-600"]].map(([label, value, hint, tone]) => (
                   <div key={label} className="rounded-xl bg-slate-50 p-2.5">
                     <div className={cn("text-lg font-semibold tabular-nums text-slate-900", tone)}>{value}</div>
-                    <div className="text-[11px] text-slate-500">{label} · {hint}</div>
+                    <div className="text-[12px] text-slate-500">{label} · {hint}</div>
                   </div>
                 ))}
               </div>
@@ -83,7 +83,7 @@ export function CompanyDashboard({ d, admin }: { d: CompanyData; admin: boolean 
             <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
               <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.min(d.target.progress ?? 0, 100)}%` }} />
             </div>
-            {!d.target.target && <p className="text-xs text-slate-500">Set monthly targets for executives in {admin ? "Users → Monthly targets" : "Targets (top right)"}.</p>}
+            {!d.target.target && <p className="text-xs text-slate-500">Set monthly targets for KAMs in {admin ? "Users → Monthly targets" : "Targets (top right)"}.</p>}
           </Section>
         )}
       </div>

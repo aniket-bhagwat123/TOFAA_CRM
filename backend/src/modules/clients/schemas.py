@@ -21,6 +21,7 @@ class ClientCreate(CamelModel):
     email: Email | None = None
     designation: str | None = Field(default=None, max_length=120)
     city: str | None = Field(default=None, max_length=120)
+    account_owner_id: str | None = None  # the KAM to give the client to (sales managers and admins); empty: whoever adds it
 
     @field_validator("company_name", "contact_name", "designation", "city", "phone", mode="before")
     @classmethod

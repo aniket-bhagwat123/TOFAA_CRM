@@ -9,7 +9,7 @@ import { useApi } from "@/hooks/use-api";
 import { apiClient, errorMessage } from "@/services/api-client";
 import type { AssignableUser } from "@/types/crm";
 
-const ROLE_LABEL: Record<string, string> = { sales_executive: "Sales executive", sales_manager: "Sales manager" };
+const ROLE_LABEL: Record<string, string> = { kam: "KAM", sales_manager: "Sales manager" };
 
 /** How many of `total` leads each of `people` gets when they are dealt out in turn. */
 const shares = (total: number, people: number) => Array.from({ length: people }, (_, i) => Math.floor(total / people) + (i < total % people ? 1 : 0));
@@ -29,7 +29,7 @@ export function BulkReassignSheet({ leadIds, onClose, onDone }: Props) {
   useEffect(() => { if (open) { setPicked([]); setSearch(""); setNote(""); setError(""); } }, [open]);
 
   const total = leadIds?.length ?? 0;
-  const people = (users.data ?? []).filter((u) => u.role in ROLE_LABEL); // lead owners: sales executives and managers
+  const people = (users.data ?? []).filter((u) => u.role in ROLE_LABEL); // lead owners: KAMs and managers
   const shown = people.filter((u) => (u.fullName ?? "").toLowerCase().includes(search.trim().toLowerCase()));
   const split = shares(total, picked.length || 1);
   const toggle = (id: string) => { setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id])); setError(""); };

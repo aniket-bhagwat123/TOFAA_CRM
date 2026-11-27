@@ -26,7 +26,7 @@ from src.core.soft_delete import live
 from src.core.storage import CLIENT_IMAGES, signed_urls
 from src.core.supabase import get_service_client
 from src.modules.auth.dependencies import get_current_user
-from src.modules.auth.schemas import Role
+from src.modules.auth.schemas import KAM_VALUES, Role
 from src.modules.integrations.router import require_gifting_os_key
 from src.modules.people import router as people_router
 from src.modules.people.service import ExternalActor
@@ -87,15 +87,33 @@ def tenant(tenant_id: TenantDep, _key: Annotated[None, Depends(require_gifting_o
     return ok({"company_id": company["id"], "name": company["name"]})
 
 
+@app.get("/account")
+def account(tenant_id: TenantDep, _key: Annotated[None, Depends(require_gifting_os_key)]):
+    """The CRM's own facts about this client, shown to TOFAA staff in Gifting OS: account owner and business contacts."""
+    company = _company_or_404(tenant_id)
+    db = get_service_client()
+    owner = None
+    if company.get("account_owner_id"):
+        rows = db.table("profiles").select("full_name,email").eq("id", company["account_owner_id"]).limit(1).execute().data
+        owner = rows[0] if rows else None
+    contacts = db.table("contacts").select("name,designation,phone,email").eq("company_id", company["id"]).order("created_at").limit(100).execute().data
+    return ok({"name": company["name"], "owner": owner, "contacts": contacts})
+
+
 @app.put("/tenant")
 def link_tenant(body: LinkIn, tenant_id: TenantDep, _key: Annotated[None, Depends(require_gifting_os_key)]):
+    company = link_account(tenant_id, body.name)
+    return ok({"company_id": company["id"], "name": company["name"]})
+
+
+def link_account(tenant_id: str, name: str) -> dict:
     """Link this Gifting OS client to a CRM client account: the one already linked, else one with the same name (made a
     client if it was not), else a new client account owned by GIFTING_OS_ACCOUNT_OWNER (a KAM's email)."""
     db = get_service_client()
     company = linked_company(tenant_id)
     now = datetime.now(timezone.utc).isoformat()
     if not company:
-        key = company_key(body.name)
+        key = company_key(name)
         same = live(db.table("companies").select("id,name,client_since,account_owner_id,gifting_tenant_id").eq("name_key", key), "companies").limit(1).execute().data
         if same and same[0].get("gifting_tenant_id"):
             raise AppError(f"The CRM account {same[0]['name']!r} is already linked to another Gifting OS client.", status_code=409)
@@ -107,7 +125,7 @@ def link_tenant(body: LinkIn, tenant_id: TenantDep, _key: Annotated[None, Depend
             db.table("companies").update(patch).eq("id", company["id"]).execute()
         else:
             company = db.table("companies").insert({
-                "name": body.name.strip(), "name_key": key, "created_by": owner, "client_since": now,
+                "name": name.strip(), "name_key": key, "created_by": owner, "client_since": now,
                 "account_owner_id": owner, "gifting_tenant_id": tenant_id,
             }).execute().data[0]
         # People already in this account changed before Gifting OS's "changed after" mark: mark them changed again so
@@ -116,7 +134,7 @@ def link_tenant(body: LinkIn, tenant_id: TenantDep, _key: Annotated[None, Depend
         log.info("linked Gifting OS tenant %s to CRM account %s", tenant_id, company["id"])
     elif not company.get("client_since"):
         db.table("companies").update({"client_since": now}).eq("id", company["id"]).execute()
-    return ok({"company_id": company["id"], "name": company["name"]})
+    return company
 
 
 def _owner_id() -> str | None:
@@ -124,7 +142,7 @@ def _owner_id() -> str | None:
     if not who:
         return None
     rows = get_service_client().table("profiles").select("id,email,role").ilike("email", who).limit(1).execute().data
-    return rows[0]["id"] if rows and rows[0].get("role") in ("kam", "admin") else None
+    return rows[0]["id"] if rows and rows[0].get("role") in (*KAM_VALUES, "admin") else None
 
 
 @app.get("/people-sync")

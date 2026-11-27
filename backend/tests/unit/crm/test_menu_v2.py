@@ -11,7 +11,7 @@ from src.modules.auth.schemas import Profile, Role
 from src.modules.orders import service as orders
 from src.modules.reports import service as reports
 
-EXEC = Profile(id="e1", role=Role.SALES_EXECUTIVE)
+EXEC = Profile(id="e1", role=Role.KAM)
 MGR = Profile(id="m1", role=Role.SALES_MANAGER)
 CUSTOM = [*ag_schemas.DEFAULT_TERMS, {"title": "Penalty", "body": "2% per week of delay."}]
 
@@ -81,7 +81,7 @@ def test_executives_never_see_the_activity_feed():
     from src.modules.activity_feed import service as feed
 
     with pytest.raises(ForbiddenError):
-        feed.feed(Profile(id="e1", role=Role.SALES_EXECUTIVE), before=None, kind=None, owner_id=None, lead_id=None, company_id=None)
+        feed.feed(Profile(id="e1", role=Role.KAM), before=None, kind=None, owner_id=None, lead_id=None, company_id=None)
 
 
 def test_a_kam_sees_only_what_they_own_and_never_activity():
@@ -103,7 +103,7 @@ def test_managers_see_all_data_like_the_superadmin():
     mgr = Profile(id="m1", role=Role.SALES_MANAGER)
     assert visible_owner_ids(mgr) is None  # everyone's leads, follow-ups, quotations, clients, reports
     assert can_access_owner(mgr, "anyone-else")
-    assert visible_owner_ids(Profile(id="e1", role=Role.SALES_EXECUTIVE)) == ["e1"]  # executives still only their own
+    assert visible_owner_ids(Profile(id="e1", role=Role.KAM)) == ["e1"]  # a KAM still only their own
 
 
 def test_every_role_has_its_own_dashboard(monkeypatch):
@@ -112,9 +112,9 @@ def test_every_role_has_its_own_dashboard(monkeypatch):
 
     monkeypatch.setattr(cache, "memo", lambda name, uid, params, ttl, loader: loader())
     seen = {}
-    for name in ("_executive", "_manager", "_admin", "_finance", "_kam"):
+    for name in ("_manager", "_admin", "_finance", "_kam"):
         monkeypatch.setattr(dash, name, lambda user, name=name: seen.setdefault(user.role.value, name) and {"built": name})
-    for role in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER, Role.ADMIN, Role.FINANCE, Role.KAM):
+    for role in (Role.SALES_MANAGER, Role.ADMIN, Role.FINANCE, Role.KAM):
         out = dash.dashboard(Profile(id="x", role=role))
         assert out["role"] == role.value
-    assert seen == {"sales_executive": "_executive", "sales_manager": "_manager", "admin": "_admin", "finance": "_finance", "kam": "_kam"}
+    assert seen == {"sales_manager": "_manager", "admin": "_admin", "finance": "_finance", "kam": "_kam"}

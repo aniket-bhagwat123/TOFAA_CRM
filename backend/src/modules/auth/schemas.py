@@ -7,12 +7,23 @@ from src.core.schema import CamelModel
 from src.core.validators import Email, clean_phone
 
 
+LEGACY_KAM = "sales_executive"
+
+
 class Role(StrEnum):
     ADMIN = "admin"
     SALES_MANAGER = "sales_manager"
-    SALES_EXECUTIVE = "sales_executive"
     FINANCE = "finance"
-    KAM = "kam"
+    KAM = "kam"  # Key Account Manager
+
+    @classmethod
+    def _missing_(cls, value):
+        """Sales Executive became KAM: an account (or setting) still saved with the old name is read as KAM."""
+        return cls.KAM if value == LEGACY_KAM else None
+
+
+# Every value a KAM can be stored as: for database filters, until all rows are migrated.
+KAM_VALUES = (Role.KAM.value, LEGACY_KAM)
 
 
 class OtpRequest(CamelModel):
@@ -86,7 +97,7 @@ class SignupRequest(CamelModel):
     """Someone creating their own account, with the role they work in. Admin cannot be chosen."""
 
     full_name: str = Field(min_length=1, max_length=200)
-    role: Role = Role.SALES_EXECUTIVE
+    role: Role = Role.KAM
     email: Email
     password: str = Field(min_length=8, max_length=72)
     phone: str | None = Field(default=None, max_length=20)

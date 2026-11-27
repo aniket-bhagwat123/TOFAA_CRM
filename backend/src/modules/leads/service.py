@@ -3,7 +3,7 @@ import re
 from uuid import uuid4
 
 from src.core import app_settings, cache
-from src.core.access import assert_can_access_lead, require_lead_role, visible_owner_ids
+from src.core.access import ASSIGN_ROLES, assert_can_access_lead, require_lead_role, visible_owner_ids
 from src.core.audit import write_audit
 from src.core.concurrency import check_version
 from src.core.dates import now_ist, next_business_day, today_ist
@@ -16,7 +16,7 @@ from src.core.soft_delete import is_deleted, live, require_ready
 from src.core.storage import CLIENT_IMAGES, delete_image, guard_photo_write, signed_url, signed_urls, upload_image
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import KAM_VALUES, Profile, Role
 from src.modules.leads import schemas
 from src.modules.leads.stages import lost_from, stage_label
 from src.modules.leads.stages import (
@@ -176,7 +176,7 @@ def find_duplicates(user: Profile, company_name: str | None, phone: str | None, 
 def create_lead(user: Profile, body: schemas.LeadCreate) -> dict:
     require_lead_role(user)
     dups = find_duplicates(user, body.company_name, body.phone, body.email)
-    # A second contact at an existing company is allowed only when the executive says so
+    # A second contact at an existing company is allowed only when the KAM says so
     # and nothing else (phone / email) matches.
     only_company = bool(dups) and all(d["matchedOn"] == ["company"] for d in dups)
     if dups and not (only_company and body.use_existing_company):
@@ -184,10 +184,8 @@ def create_lead(user: Profile, body: schemas.LeadCreate) -> dict:
 
     owner_id = user.id
     if body.owner_id and body.owner_id != user.id:
-        if user.role == Role.SALES_EXECUTIVE:
+        if user.role not in ASSIGN_ROLES:
             raise ForbiddenError("You can only create leads for yourself.")
-        if visible_owner_ids(user) is not None and body.owner_id not in visible_owner_ids(user):
-            raise ForbiddenError()
         owner_id = body.owner_id
 
     db = get_service_client()
@@ -401,7 +399,7 @@ def update_lead(user: Profile, lead_id: str, body: schemas.LeadUpdate) -> dict:
 # --- stage -------------------------------------------------------------------------------------------
 
 def auto_advance(lead: dict, target: str, actor_id: str | None, reason: str) -> bool:
-    """Move a lead forward because of something the executive did (call logged, meeting created ...).
+    """Move a lead forward because of something the KAM did (call logged, meeting created ...).
 
     The same action means a different stage on a client project (a meeting is "Meeting", a sent quotation is
     "Proposal"), and some actions have no stage there at all (a call does not move a project).
@@ -517,18 +515,15 @@ def lost_from_stage(lead_id: str) -> str | None:
 # --- reassign ---------------------------------------------------------------------------------------------
 
 def reassign(user: Profile, lead_id: str, body: schemas.Reassign) -> dict:
-    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
-        raise ForbiddenError("Only managers can reassign leads.")
+    if user.role not in ASSIGN_ROLES:
+        raise ForbiddenError("Your role cannot reassign leads.")
     db = get_service_client()
     lead, target = par(
         lambda: get_lead_row(user, lead_id),
         lambda: db.table("profiles").select("id,full_name,role,is_active").eq("id", body.owner_id).limit(1).execute().data,
     )
-    visible = visible_owner_ids(user)
-    if visible is not None and body.owner_id not in visible:
-        raise ForbiddenError("You can only assign to people on your team.")
-    if not target or not target[0]["is_active"] or target[0]["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value):
-        raise AppError("Pick an active sales executive or manager.", status_code=422)
+    if not target or not target[0]["is_active"] or target[0]["role"] not in (*KAM_VALUES, Role.SALES_MANAGER.value):
+        raise AppError("Pick an active KAM or manager.", status_code=422)
     now = now_ist().isoformat()
     par(
         lambda: db.table("leads").update({"owner_id": body.owner_id, "updated_at": now}).eq("id", lead_id).execute(),
@@ -551,19 +546,16 @@ def share_out(lead_ids: list[str], owner_ids: list[str]) -> dict[str, str]:
 def bulk_reassign(user: Profile, body: schemas.BulkReassign) -> dict:
     """Managers hand many new-business leads to one or several people, with the same rules as a single reassign.
     Everyone is checked before anything is written."""
-    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
-        raise ForbiddenError("Only managers can reassign leads.")
+    if user.role not in ASSIGN_ROLES:
+        raise ForbiddenError("Your role cannot reassign leads.")
     db = get_service_client()
     ids = list(dict.fromkeys(body.lead_ids))
     owners = list(dict.fromkeys(body.owner_ids))
     people = {p["id"]: p for p in db.table("profiles").select("id,full_name,role,is_active").in_("id", owners).execute().data}
-    visible = visible_owner_ids(user)
     for owner in owners:
-        if visible is not None and owner not in visible:
-            raise ForbiddenError("You can only assign to people on your team.")
         target = people.get(owner)
-        if not target or not target["is_active"] or target["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value):
-            raise AppError("Pick active sales executives or managers.", status_code=422)
+        if not target or not target["is_active"] or target["role"] not in (*KAM_VALUES, Role.SALES_MANAGER.value):
+            raise AppError("Pick active KAMs or managers.", status_code=422)
     found: dict[str, dict] = {}
     for i in range(0, len(ids), 100):
         q = db.table("leads").select("id,owner_id").in_("id", ids[i : i + 100]).eq("pipeline", "new_business")
@@ -733,10 +725,10 @@ def _join(parts: list[str]) -> str:
 def delete_lead(user: Profile, lead_id: str) -> dict:
     """Soft delete: hide a lead that was added by mistake (a duplicate, test data, a wrong entry).
     Only when nothing is connected to it; a lead with business history is closed as Lost instead, so reports and the
-    client's history stay right. Managers and admins can delete any lead; an executive only their own."""
+    client's history stay right. Managers and admins can delete any lead; a KAM only their own."""
     require_ready("leads", "companies")
     lead = get_lead_row(user, lead_id)
-    if user.role not in (Role.ADMIN, Role.SALES_MANAGER) and not (user.role == Role.SALES_EXECUTIVE and lead.get("owner_id") == user.id):
+    if user.role not in (Role.ADMIN, Role.SALES_MANAGER) and not (user.role == Role.KAM and lead.get("owner_id") == user.id):
         raise ForbiddenError("Only a manager, an admin or the lead's owner can delete this lead.")
     name = lead["company"]["name"] + (f" \u00b7 {lead['project_title']}" if lead.get("project_title") and lead.get("pipeline") == "client" else "")
     if lead["stage"] == "closed_won":

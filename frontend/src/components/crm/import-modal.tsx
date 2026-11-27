@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { SelectField } from "@/components/ui/select-field";
 import { useApi } from "@/hooks/use-api";
-import { isManager } from "@/lib/roles";
+import { canAssignLeads } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
@@ -63,8 +63,8 @@ type Props = { open: boolean; onClose: () => void; onImported: () => void };
 /** The whole import in one dialog: get a sample, upload, match columns, review problems, import. */
 export function ImportModal({ open, onClose, onImported }: Props) {
   const user = useAppSelector((s) => s.auth.session?.profile);
-  const manager = !!user && isManager(user.role);
-  const people = useApi<AssignableUser[]>(open && manager ? "/users/assignable" : null);
+  const assigner = !!user && canAssignLeads(user.role);
+  const people = useApi<AssignableUser[]>(open && assigner ? "/users/assignable" : null);
   const fileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState<Step>("upload");
   const [parsed, setParsed] = useState<Parsed | null>(null);
@@ -204,7 +204,7 @@ export function ImportModal({ open, onClose, onImported }: Props) {
               />
             ))}
           </div>
-          {manager && (
+          {assigner && (
             <SelectField label="Assign imported leads to" placeholder="Me" value={owner} options={(people.data ?? []).map((u) => ({ value: u.id, label: u.fullName ?? u.id }))} onChange={(e) => setOwner(e.target.value)} />
           )}
           {mapError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{mapError}</p>}

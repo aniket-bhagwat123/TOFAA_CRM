@@ -57,15 +57,15 @@ Every text field has a plain prompt and never an example value. `InputField` and
 
 ## Type scale
 
-One set of text sizes for every screen (defined in `globals.css`). Use these classes, not ad-hoc `text-[15px]` or `text-2xl`:
+One set of text sizes for every screen (defined in `globals.css`). Sizes below are on desktop, where the whole app draws at 95% (set on `html` in `globals.css`). Use these classes, not ad-hoc `text-[15px]` or `text-2xl`:
 
 | Class | Size | Use |
 |---|---|---|
-| `t-title` | 20px (22px on desktop), bold | The record's name: lead, client |
-| `t-section` | 16px, semibold | Card headings |
-| `t-body` | 14px | Normal text and values |
+| `t-title` | 18px on phones, 21px on desktop, bold | The record's name: lead, client |
+| `t-section` | 15px, semibold | Card headings |
+| `t-body` | 13.8px | Normal text and values |
 | `t-meta` | 13px, slate-500 | Dates, owners, secondary lines |
-| `t-caption` | 12px | Labels above values, chips, stepper labels |
+| `t-caption` | 12.4px | Labels above values, chips, stepper labels |
 
 Rules that keep text from overlapping, including at Windows 125% scaling:
 - Buttons never wrap their label (`whitespace-nowrap` in Button). Keep labels short: "Meeting", not "Schedule meeting".

@@ -25,9 +25,9 @@ export function TimePicker({ label, value, onChange, error, required, placeholde
     const n = { ...t, ...patch };
     onChange(buildTime(n.h12, n.min, n.pm));
   };
-  const col = "flex max-h-48 flex-1 flex-col gap-0.5 overflow-y-auto";
+  const col = "flex max-h-40 flex-1 flex-col gap-0.5 overflow-y-auto";
   const cell = (on: boolean) =>
-    cn("pressable rounded-lg px-2 py-1.5 text-center text-sm", on ? "bg-brand font-semibold text-white" : "text-slate-700 hover:bg-brand-soft");
+    cn("pressable shrink-0 rounded-lg px-2 py-1.5 text-center text-sm", on ? "bg-brand font-semibold text-white" : "text-slate-700 hover:bg-brand-soft");
 
   return (
     <div className="space-y-1">
@@ -54,10 +54,10 @@ export function TimePicker({ label, value, onChange, error, required, placeholde
       </button>
       {error && <span role="alert" className="block text-xs font-medium text-red-600">{error}</span>}
 
-      <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} width={268} label="Choose a time">
-        <div className="mb-3 flex flex-wrap gap-1.5">
+      <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} width={288} label="Choose a time">
+        <div className="mb-3 grid grid-cols-4 gap-1.5">
           {PRESETS.map((p) => (
-            <button key={p} type="button" onClick={() => { onChange(p); setOpen(false); }} className={cn("pressable rounded-full border px-2.5 py-1 text-xs font-medium", value === p ? "border-brand bg-brand-soft text-brand" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
+            <button key={p} type="button" onClick={() => { onChange(p); setOpen(false); }} className={cn("pressable whitespace-nowrap rounded-full border px-1 py-1 text-xs font-medium", value === p ? "border-brand bg-brand-soft text-brand" : "border-slate-200 text-slate-600 hover:bg-slate-50")}>
               {longTime(p)}
             </button>
           ))}

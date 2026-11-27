@@ -34,7 +34,7 @@ export function CallStatusBadge({ outcome, at, attempts, className }: Props) {
     <span
       title={title}
       className={cn(
-        "inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset",
+        "inline-flex max-w-full items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium ring-1 ring-inset",
         look?.tone ?? "bg-white text-slate-400 ring-slate-200",
         className,
       )}
@@ -52,7 +52,7 @@ export function LeadTags({ tags, outcome, cold, className }: { tags?: string[] |
   return (
     <>
       {shown.map((t) => (
-        <span key={t} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium", t === "cold" ? "bg-sky-50 text-sky-700" : "bg-indigo-50 text-indigo-700", className)}>
+        <span key={t} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-medium", t === "cold" ? "bg-sky-50 text-sky-700" : "bg-indigo-50 text-indigo-700", className)}>
           {TAG_LABEL[t]}
         </span>
       ))}

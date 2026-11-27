@@ -3,7 +3,7 @@
 Safe by default:
   - the person picks their role from SIGNUP_ALLOWED_ROLES; Admin can never be picked
   - with SIGNUP_REQUIRES_APPROVAL the account stays inactive until an admin activates it, and admins are told
-  - a role above Sales Executive (manager, finance, KAM) always waits for approval, even with approval switched off
+  - every role (KAM, manager, finance) reaches client data, so it always waits for approval, even with approval switched off
   - SIGNUP_ALLOWED_DOMAINS limits sign-up to company email addresses
   - SIGNUP_ENABLED switches the whole thing off
 """
@@ -46,7 +46,7 @@ def check_role(role: Role) -> None:
 
 
 def needs_approval(role: Role) -> bool:
-    return settings.SIGNUP_REQUIRES_APPROVAL or role != Role.SALES_EXECUTIVE
+    return True  # no role is harmless enough to open without an admin's yes
 
 
 def check_domain(email: str) -> None:

@@ -32,7 +32,7 @@ def notify(user_id: str, key: str, title: str, body: str | None = None, link: st
 
 def generate(user: Profile) -> None:
     gifting_requests.raise_alerts_in_background(user)  # KAMs: new gift requests from their clients
-    if user.role not in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER, Role.ADMIN):
+    if user.role not in (Role.KAM, Role.SALES_MANAGER, Role.ADMIN):
         return
     db = get_service_client()
     now, today = now_ist(), today_ist().isoformat()
@@ -60,7 +60,7 @@ def generate(user: Profile) -> None:
 
 def _escalations(manager: Profile) -> list[dict]:
     """Follow-ups of the manager's team that are 3+ days overdue: one reminder per follow-up, to the manager.
-    (Overdue by 1 day already shows in red to the executive on the Follow-ups board and in Today on the Dashboard.)"""
+    (Overdue by 1 day already shows in red to the KAM on the Follow-ups board and in Today on the Dashboard.)"""
     db = get_service_client()
     team = db.table("profiles").select("id,full_name").eq("manager_id", manager.id).neq("id", manager.id).execute().data
     if not team:

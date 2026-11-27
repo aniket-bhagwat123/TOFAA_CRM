@@ -10,7 +10,7 @@ from src.core.errors import ForbiddenError
 from src.core.parallel import par
 from src.core.supabase import get_service_client
 from src.core.soft_delete import live
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import KAM_VALUES, Profile, Role
 from src.modules.leads.stages import CLOSED
 from src.modules.leads.value import decimal_value
 from src.modules.targets import service as targets
@@ -30,7 +30,7 @@ def _summary(user: Profile) -> dict:
     db = get_service_client()
     # Admins can own deals too (and often do early on), so on an admin's dashboard they count like everyone else.
     # Managers see the whole company like the Superadmin; admins can own deals too, so they count like everyone else.
-    owner_roles = [Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value, Role.ADMIN.value, Role.KAM.value]
+    owner_roles = [*KAM_VALUES, Role.SALES_MANAGER.value, Role.ADMIN.value]
     people_q = db.table("profiles").select("id,full_name,role,manager_id").eq("is_active", True).in_("role", owner_roles)
     people = people_q.order("full_name").execute().data
     ids = [p["id"] for p in people]
@@ -50,7 +50,7 @@ def _summary(user: Profile) -> dict:
         ),
     )
 
-    stats = {p["id"]: {"id": p["id"], "fullName": p["full_name"], "role": p["role"], "open": 0, "overdue": 0, "noNextAction": 0, "meetingsToday": 0} for p in people}
+    stats = {p["id"]: {"id": p["id"], "fullName": p["full_name"], "role": Role(p["role"]).value, "open": 0, "overdue": 0, "noNextAction": 0, "meetingsToday": 0} for p in people}
     overdue_leads = []
     for lead in leads:
         s = stats[lead["owner_id"]]
@@ -96,7 +96,7 @@ def _pipeline(leads: list[dict]) -> dict:
 
 
 def _target(user: Profile) -> dict | None:
-    """This month's target for the team (sum of the executives' targets) against what they have won."""
+    """This month's target for the team (sum of the KAMs' targets) against what they have won."""
     try:
         data = targets.list_settings(user, None)
     except Exception:  # noqa: BLE001 - the dashboard still shows everything else

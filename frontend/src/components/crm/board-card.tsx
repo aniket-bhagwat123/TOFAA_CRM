@@ -26,7 +26,7 @@ export function BoardCard({ lead, showOwner, onDragStart, onOpen }: Props) {
       <div className="flex items-start gap-3">
         <Avatar src={lead.contact.photoUrl} name={lead.contact.name} size="md" square />
         <div className="min-w-0 flex-1">
-          {lead.projectTitle && lead.pipeline === "client" && <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-brand">{lead.projectTitle}</div>}
+          {lead.projectTitle && lead.pipeline === "client" && <div className="truncate text-[12px] font-semibold uppercase tracking-wide text-brand">{lead.projectTitle}</div>}
           <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900">{lead.company.name}</div>
           <div className="mt-0.5 truncate text-xs text-slate-500">{lead.contact.name}{lead.contact.designation ? ` · ${lead.contact.designation}` : ""}</div>
         </div>
@@ -43,8 +43,8 @@ export function BoardCard({ lead, showOwner, onDragStart, onOpen }: Props) {
         <div className="flex flex-wrap gap-1.5">
           {showCall && <CallStatusBadge outcome={lead.lastCallOutcome} at={lead.lastCallAt} attempts={lead.callAttempts} />}
           {showCall && <LeadTags tags={lead.tags} outcome={lead.lastCallOutcome} cold={lead.cold} />}
-          {(lead.dealValue || lead.valueBand) && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[11px] font-medium text-brand" title={lead.valueSource ?? undefined}>{lead.dealValue ? inrShort(lead.dealValue) : BAND_LABEL[lead.valueBand!]}</span>}
-          {lead.source && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">{lead.source}</span>}
+          {(lead.dealValue || lead.valueBand) && <span className="rounded-full bg-brand-soft px-2 py-0.5 text-[12px] font-medium text-brand" title={lead.valueSource ?? undefined}>{lead.dealValue ? inrShort(lead.dealValue) : BAND_LABEL[lead.valueBand!]}</span>}
+          {lead.source && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[12px] font-medium text-slate-600">{lead.source}</span>}
         </div>
       )}
 

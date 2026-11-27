@@ -45,3 +45,8 @@ def complete_task(task_id: str, body: schemas.TaskComplete, user: CurrentUserDep
 @router.post("/tasks/{task_id}/snooze")
 def snooze_task(task_id: str, body: schemas.TaskSnooze, user: CurrentUserDep):
     return ok(service.snooze_task(user, task_id, body.due_date, body.due_at, body.note, body.reason), "Snoozed.")
+
+
+@router.delete("/tasks/{task_id}")
+def delete_task(task_id: str, user: CurrentUserDep):
+    return ok(service.delete_task(user, task_id), "Follow-up deleted.")

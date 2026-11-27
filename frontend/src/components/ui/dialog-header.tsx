@@ -25,7 +25,7 @@ export function DialogHeader({ title, subtitle, icon: Icon, tone = "violet", onC
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <h2 className="truncate text-[1.05rem] font-semibold leading-tight tracking-tight text-slate-900">{title}</h2>
+        <h2 className="truncate text-base font-semibold leading-tight tracking-tight text-slate-900">{title}</h2>
         {subtitle && <p className="mt-0.5 truncate text-sm text-slate-500">{subtitle}</p>}
       </div>
       <button type="button" onClick={onClose} aria-label="Close" className="pressable shrink-0 rounded-full p-2 text-slate-400 hover:bg-white/80 hover:text-slate-700">

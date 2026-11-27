@@ -1,7 +1,7 @@
 """WhatsApp: Business Cloud API when configured, click-to-chat fallback until Meta approves.
 
 One company number. Every message is saved against the lead and its company, so the history stays
-with the company if an executive leaves.
+with the company if a KAM leaves.
 """
 import hashlib
 import hmac

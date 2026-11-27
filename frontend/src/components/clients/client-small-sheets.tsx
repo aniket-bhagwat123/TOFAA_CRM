@@ -12,6 +12,8 @@ import { EMAIL_MSG, isEmail, isPhone10, PHONE_MSG } from "@/lib/validation";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import type { AssignableUser, CalendarDate, ClientSummary } from "@/types/crm";
+import { isManager } from "@/lib/roles";
+import { useAppSelector } from "@/store/hooks";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -133,9 +135,13 @@ export function ContactSheet({ client, onClose, onDone }: { client: { id: string
   );
 }
 
-/** Managers and admins: who owns the client, and the tier if it should not follow revenue. */
+/** The client's KAM (sales managers and admins), and the tier if it should not follow revenue. */
 export function ManageClientSheet({ client, onClose, onDone }: { client: ClientSummary | null; onClose: () => void; onDone: () => void }) {
   const people = useApi<AssignableUser[]>(client ? "/users/assignable" : null);
+  const me = useAppSelector((s) => s.auth.session?.profile);
+  const assigns = !!me && isManager(me.role); // assigning clients is for sales managers and admins
+  const kams = (people.data ?? []).filter((u) => u.role === "kam");
+  const ownerIsKam = kams.some((u) => u.id === client?.owner?.id);
   const [owner, setOwner] = useState("");
   const [tier, setTier] = useState("");
   const [busy, setBusy] = useState(false);
@@ -145,7 +151,7 @@ export function ManageClientSheet({ client, onClose, onDone }: { client: ClientS
     if (!client) return;
     setBusy(true);
     try {
-      await apiClient.patch(`/clients/${client.id}`, { accountOwnerId: owner || null, tierOverride: tier || null, clearTierOverride: !tier });
+      await apiClient.patch(`/clients/${client.id}`, { accountOwnerId: assigns && owner !== client.owner?.id ? owner || null : null, tierOverride: tier || null, clearTierOverride: !tier });
       toast.success("Saved");
       onClose();
       onDone();
@@ -159,8 +165,13 @@ export function ManageClientSheet({ client, onClose, onDone }: { client: ClientS
   return (
     <Sheet open={!!client} title="Manage client" subtitle={client?.name} icon={Settings2} tone="violet" onClose={onClose}>
       <div className="space-y-4">
-        <SelectField label="Account owner" required value={owner} options={(people.data ?? []).map((u) => ({ value: u.id, label: u.fullName ?? u.id }))} onChange={(e) => setOwner(e.target.value)} />
-        <p className="-mt-2 text-xs text-slate-400">Open projects and follow-ups move to the new owner.</p>
+        {assigns && (
+          <>
+            <SelectField label="Assigned KAM" placeholder={client?.owner && !ownerIsKam ? `${client.owner.fullName ?? "Current owner"} (not a KAM)` : "Choose a KAM"}
+              value={kams.some((u) => u.id === owner) ? owner : ""} options={kams.map((u) => ({ value: u.id, label: u.fullName ?? u.id }))} onChange={(e) => setOwner(e.target.value || client?.owner?.id || "")} />
+            <p className="-mt-2 text-xs text-slate-400">Open projects and follow-ups move to the new KAM.</p>
+          </>
+        )}
         <SelectField label="Tier" placeholder="Automatic (by revenue)" value={tier} options={["A", "B", "C"].map((t) => ({ value: t, label: `Tier ${t}` }))} onChange={(e) => setTier(e.target.value)} />
         <Button onClick={save} loading={busy} className="w-full">Save</Button>
       </div>

@@ -4,7 +4,7 @@ from pydantic import ValidationError
 from src.core.config import settings
 from src.core.errors import AppError, ForbiddenError
 from src.modules.auth import signup as mod
-from src.modules.auth.schemas import LoginResponse, Profile, Role, SignupRequest, TokenPair
+from src.modules.auth.schemas import Role, SignupRequest
 
 GOOD = {"fullName": "  Asha   Rao ", "email": "Asha@Tofaa.in", "password": "Tofaa2026x"}
 
@@ -47,15 +47,15 @@ def test_request_rejects_weak_password_bad_email_and_role_field_is_ignored():
         req(role="admin")  # admin can never sign up
     with pytest.raises(ValidationError):
         req(role="owner")
-    assert req().role == Role.SALES_EXECUTIVE  # the default
+    assert req().role == Role.KAM  # the default
 
 
 # --- flow ----------------------------------------------------------------------------------
 
-def test_signup_creates_an_inactive_sales_executive_and_tells_admins(made):
+def test_signup_creates_an_inactive_kam_and_tells_admins(made):
     res = mod.signup(req())
     acc = made["accounts"][0]
-    assert acc["role"] == Role.SALES_EXECUTIVE and acc["is_active"] is False
+    assert acc["role"] == Role.KAM and acc["is_active"] is False
     assert res.status == "pending" and res.tokens is None
     assert made["notified"] == [("new-id", "Asha Rao", "asha@tofaa.in")]
 
@@ -75,15 +75,6 @@ def test_only_allowed_domains(made, monkeypatch):
     assert len(made["accounts"]) == 1
 
 
-def test_without_approval_signs_in_straight_away(made, monkeypatch):
-    monkeypatch.setattr(settings, "SIGNUP_REQUIRES_APPROVAL", False)
-    session = LoginResponse(profile=Profile(id="new-id", email="asha@tofaa.in", role=Role.SALES_EXECUTIVE), tokens=TokenPair(access_token="a", refresh_token="r"))
-    monkeypatch.setattr(mod.auth, "password_login", lambda email, pw: session)
-    res = mod.signup(req())
-    assert made["accounts"][0]["is_active"] is True
-    assert res.status == "active" and res.tokens.access_token == "a" and made["notified"] == []
-
-
 def test_chosen_role_is_used(made):
     mod.signup(req(role="finance"))
     assert made["accounts"][0]["role"] == Role.FINANCE
@@ -96,7 +87,7 @@ def test_role_outside_the_allowed_list_is_refused(made, monkeypatch):
     assert Role.ADMIN not in mod.allowed_roles()
 
 
-def test_roles_above_executive_always_wait_for_approval(made, monkeypatch):
+def test_every_role_waits_for_approval_even_with_approval_switched_off(made, monkeypatch):
     monkeypatch.setattr(settings, "SIGNUP_REQUIRES_APPROVAL", False)
     res = mod.signup(req(role="sales_manager"))
     assert res.status == "pending" and made["accounts"][0]["is_active"] is False

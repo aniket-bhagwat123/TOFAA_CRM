@@ -22,7 +22,7 @@ class UserCreate(CamelModel):
     password: str = Field(min_length=8, max_length=72)
     phone: str | None = Field(default=None, max_length=20)
     full_name: str = Field(min_length=1, max_length=200)
-    role: Role = Role.SALES_EXECUTIVE
+    role: Role = Role.KAM
     manager_id: str | None = None
 
     @field_validator("phone")

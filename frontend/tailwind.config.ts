@@ -20,6 +20,12 @@ const config: Config = {
       fontFamily: {
         sans: ["system-ui", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "Helvetica Neue", "Arial", "sans-serif"],
       },
+      // Sizes are in rem, so they follow the desktop scale in globals.css. The two small sizes are nudged up to stay
+      // readable there: about 12.4px and 13.8px on desktop.
+      fontSize: {
+        xs: ["0.8125rem", { lineHeight: "1.125rem" }],
+        sm: ["0.90625rem", { lineHeight: "1.3125rem" }],
+      },
       borderRadius: { xl: "0.875rem", "2xl": "1.25rem", "3xl": "1.75rem" },
       boxShadow: {
         card: "0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px rgb(15 23 42 / 0.05)",

@@ -22,10 +22,10 @@ def test_no_discount_means_total_equals_subtotal():
 @pytest.mark.parametrize(
     "role,pct,limit,expected",
     [
-        (Role.SALES_EXECUTIVE, D("5"), D("5"), "ready"),               # exactly at the limit: allowed
-        (Role.SALES_EXECUTIVE, D("5.01"), D("5"), "pending_approval"),  # above: goes to the manager
-        (Role.SALES_EXECUTIVE, D("0"), D("0"), "ready"),
-        (Role.SALES_EXECUTIVE, D("1"), D("0"), "pending_approval"),     # no limit set means no discount allowed
+        (Role.KAM, D("5"), D("5"), "ready"),               # exactly at the limit: allowed
+        (Role.KAM, D("5.01"), D("5"), "pending_approval"),  # above: goes to the manager
+        (Role.KAM, D("0"), D("0"), "ready"),
+        (Role.KAM, D("1"), D("0"), "pending_approval"),     # no limit set means no discount allowed
         (Role.SALES_MANAGER, D("40"), D("0"), "approved"),
         (Role.ADMIN, D("40"), D("0"), "approved"),
     ],
@@ -70,7 +70,7 @@ def test_who_may_decide():
     mgr = Profile(id="m1", role=Role.SALES_MANAGER)
     assert service.can_decide(mgr, "e1") and service.can_decide(mgr, "someone-else")  # managers decide for everyone
     assert service.can_decide(Profile(id="a", role=Role.ADMIN), "anyone")
-    assert not service.can_decide(Profile(id="e1", role=Role.SALES_EXECUTIVE), "e1")  # nobody approves their own discount
+    assert not service.can_decide(Profile(id="e1", role=Role.KAM), "e1")  # nobody approves their own discount
 
 
 def test_the_pdf_renders_with_long_text_and_non_latin_characters():

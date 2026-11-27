@@ -11,7 +11,9 @@ export type GiftRequest = {
   relationship?: string | null; interests?: string[]; giftPreferences?: string | null; message?: string | null; specialInstructions?: string | null;
   proposal?: { note?: string | null; options: { name: string; description?: string | null; price: number | string; imageUrl?: string | null }[] } | null;
   selectedOptionIndex?: number | null;
-  createdByName?: string | null; createdAt: string; updatedAt: string;
+  createdByName?: string | null; createdByRole?: string | null; createdByAvatarUrl?: string | null; recipientAvatarUrl?: string | null;
+  relationshipContext?: string | null; initiatedVia?: string | null; giftStyle?: string | null; giftPurpose?: string | null;
+  createdAt: string; updatedAt: string;
 };
 
 export type GiftRequestList = {
@@ -27,7 +29,7 @@ export type GiftRequestDetail = {
   pilotOnly?: boolean;
   allowedActions?: GiftAction[];
   request: GiftRequest;
-  history: { id: string; fromStatus?: GiftStatus | null; toStatus: GiftStatus; note?: string | null; createdAt: string; actorName?: string | null }[];
+  history: { id: string; fromStatus?: GiftStatus | null; toStatus: GiftStatus; note?: string | null; createdAt: string; actorName?: string | null; actorRole?: string | null }[];
 };
 
 export type PlanningOptions = {
@@ -36,7 +38,9 @@ export type PlanningOptions = {
   events: { id: string; name: string; date?: string | null }[];
 };
 
+export type GiftingLogin = { userId: string; email: string; fullName?: string | null; status: string; clientRole?: string | null };
 export type GiftingClient = {
   linked: boolean; canSetUp: boolean; canInvite: boolean; actionsEnabled?: boolean; name?: string; status?: string;
-  users: { email: string; fullName?: string | null; status: string }[];
+  canManage?: boolean; legalName?: string | null; gstin?: string | null; emailDomain?: string | null; logoUrl?: string | null;
+  users: GiftingLogin[];
 };

@@ -22,7 +22,7 @@ export function NumberPickerSheet({ target, onClose, onPick }: Props) {
             onClick={() => target && onPick(target, n.phone)}
             className="pressable flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left hover:border-brand/40 hover:bg-brand-soft"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><Phone className="h-4 w-4" /></span>
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white"><Phone className="h-4 w-4" /></span>
             <span className="min-w-0">
               <span className="block text-base font-semibold tabular-nums text-slate-900">{n.phone}</span>
               <span className="block text-xs text-slate-500">{n.label}</span>

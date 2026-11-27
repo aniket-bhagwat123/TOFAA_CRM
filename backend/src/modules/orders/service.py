@@ -34,11 +34,17 @@ def _kam_companies(user: Profile) -> list[str]:
     return [r["id"] for r in rows] or [NOWHERE]
 
 
+def _own_order_leads(user: Profile) -> list[str]:
+    """Deals with an order that the user closed themselves, whoever looks after the account."""
+    rows = get_service_client().table("orders").select("lead_id,lead:leads!inner(owner_id)").eq("lead.owner_id", user.id).limit(500).execute().data
+    return [r["lead_id"] for r in rows] or [NOWHERE]
+
+
 def _scoped(q, user: Profile, owner_id: str | None):
-    """Only orders whose deal the user may see (an executive their own, a manager their team, an admin all,
-    a KAM the orders of their own accounts)."""
+    """Only orders whose deal the user may see (a manager or admin all, a KAM the orders of their own accounts and
+    of their own deals)."""
     if user.role == Role.KAM:
-        return q.in_("company_id", _kam_companies(user))
+        return q.or_(f"company_id.in.({','.join(_kam_companies(user))}),lead_id.in.({','.join(_own_order_leads(user))})")
     owners = visible_owner_ids(user)
     if owner_id:
         return q.eq("lead.owner_id", owner_id if owners is None or owner_id in owners else NOWHERE)
@@ -94,13 +100,13 @@ def list_orders(user: Profile, page: PageParams, *, status: str | None = None, o
 
 
 def _lead_for(user: Profile, lead_id: str) -> dict:
-    """The order's deal, if the user may see it. A KAM may, when the deal's client is one of their accounts."""
+    """The order's deal, if the user may see it. A KAM may when the deal is theirs, or its client is one of their accounts."""
     if user.role != Role.KAM:
         return leads.get_lead_row(user, lead_id)
     rows = get_service_client().table("leads").select(leads.LEAD_SELECT).eq("id", lead_id).limit(1).execute().data
     if not rows:
         raise NotFoundError("Order not found.")
-    if rows[0].get("company_id") not in _kam_companies(user):
+    if rows[0].get("owner_id") != user.id and rows[0].get("company_id") not in _kam_companies(user):
         raise ForbiddenError("This order is for another account.")
     return leads.attach_photos(rows)[0]
 

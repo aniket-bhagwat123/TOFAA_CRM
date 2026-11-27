@@ -1,5 +1,5 @@
 """Payments. The ERP (or Finance, through the fallback button) is the only thing that can mark a payment received.
-An executive can only ask for it. When the full amount has arrived the deal becomes Closed Won by itself."""
+A KAM can only ask for it. When the full amount has arrived the deal becomes Closed Won by itself."""
 import hashlib
 import hmac
 import logging
@@ -100,6 +100,27 @@ def apply_payment(req: dict, paid_total: Decimal, source: str, actor_id: str | N
         log.exception("could not mark the company as a client")
     write_audit(actor_id or "", "payment_confirmed", "payment_requests", req["id"], {"invoice": req["invoice_number"], "amount": float(paid_total), "source": source})
     return {"status": status, "amountPaid": float(paid_total)}
+
+
+def delete_request(user: Profile, request_id: str) -> dict:
+    """Remove a payment request raised by mistake. Only while no money has arrived: received payments are never deleted."""
+    if user.role not in (Role.FINANCE, Role.ADMIN):
+        raise ForbiddenError("Only Finance or an admin can delete a payment request.")
+    req = _load(request_id=request_id)
+    if req["status"] != "requested" or to_money(req["amount_paid"] or 0) > 0:
+        raise AppError("Money has been received on this request, so it can't be deleted.", status_code=409)
+    db = get_service_client()
+    # The status is checked again in the delete itself, in case the ERP confirmed it a moment ago.
+    gone = db.table("payment_requests").delete().eq("id", request_id).eq("status", "requested").execute().data
+    if not gone:
+        raise AppError("This payment changed just now. Refresh and check it.", status_code=409)
+    lead = req["lead"]
+    par(
+        lambda: db.table("agreements").update({"invoice_number": None, "invoice_raised_at": None, "updated_at": now_ist().isoformat()}).eq("lead_id", lead["id"]).execute(),
+        lambda: add_activity(lead["id"], user.id, "payment", outcome="deleted", note=f"Payment request deleted: {format_inr(to_money(req['amount']))} (reference {req['invoice_number']})"),
+    )
+    write_audit(user.id, "delete", "payment_requests", request_id, {"reference": req["invoice_number"], "amount": float(req["amount"])})
+    return {"id": request_id, "deleted": True}
 
 
 def confirm(user: Profile, request_id: str, amount) -> dict:

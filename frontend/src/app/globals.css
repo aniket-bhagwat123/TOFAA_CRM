@@ -12,8 +12,12 @@
 
 @layer base {
   html { -webkit-text-size-adjust: 100%; text-rendering: optimizeLegibility; }
+  /* Desktop scale: text, spacing and controls are all in rem, so the whole app draws at 95% on larger screens and
+     stays in proportion. Phones keep 100%, for comfortable touch targets. */
+  @media (min-width: 768px) { html { font-size: 95%; } }
   body {
     @apply bg-slate-50 font-sans text-slate-900 antialiased;
+    font-size: 0.90625rem;
     font-optical-sizing: auto;
     -webkit-tap-highlight-color: transparent;
   }
@@ -38,7 +42,7 @@
   .pressable { transition: transform 110ms var(--ease-out), background-color 150ms, opacity 150ms; }
   .pressable:active:not(:disabled) { transform: scale(0.97); }
 
-  .display { font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.04; letter-spacing: -0.03em; font-weight: 700; }
+  .display { font-size: clamp(1.75rem, 4vw, 2.75rem); line-height: 1.04; letter-spacing: -0.03em; font-weight: 700; }
 }
 
 @layer utilities {
@@ -107,16 +111,27 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 /* ── Type scale: one set of sizes for the whole app ─────────────────────────────────────────────────────────
    Use these instead of ad-hoc text-[15px] / text-2xl, so every screen reads the same and nothing outgrows its box.
-   title    page or record name (lead, client)           20px semibold-bold, tight
-   section  card heading                                  16px semibold
-   body     normal text, values                           14px
-   meta     dates, owners, secondary lines                13px slate-500
-   caption  labels above values, chips, stepper labels    12px                                                 */
+   Sizes at the 95% desktop scale:
+   title    page or record name (lead, client)           about 21px semibold-bold, tight
+   section  card heading                                  about 15px semibold
+   body     normal text, values                           about 13.8px
+   meta     dates, owners, secondary lines                about 13px slate-500
+   caption  labels above values, chips, stepper labels    about 12.4px                                             */
 @layer components {
   .t-title { font-size: 1.25rem; line-height: 1.3; font-weight: 700; letter-spacing: -0.015em; color: rgb(15 23 42); }
   .t-section { font-size: 1rem; line-height: 1.4; font-weight: 600; letter-spacing: -0.01em; color: rgb(15 23 42); }
-  .t-body { font-size: 0.875rem; line-height: 1.5; }
-  .t-meta { font-size: 0.8125rem; line-height: 1.45; color: rgb(100 116 139); }
-  .t-caption { font-size: 0.75rem; line-height: 1.35; }
+  .t-body { font-size: 0.90625rem; line-height: 1.5; }
+  .t-meta { font-size: 0.84375rem; line-height: 1.45; color: rgb(100 116 139); }
+  .t-caption { font-size: 0.8125rem; line-height: 1.35; }
   @media (min-width: 1024px) { .t-title { font-size: 1.375rem; } }
 }
+
+/* iPhone zooms the page into a field with text under 16px, so fields on phones stay at 16px. */
+@media (max-width: 639px) and (pointer: coarse) {
+  input, select, textarea { font-size: 16px !important; }
+}
+
+/* ── Tables: one step smaller than the rest of the page, so more columns and rows fit. rem, so it follows the scale. */
+main table, main table .text-sm, main table .t-body { font-size: 0.8125rem; }
+main table .text-xs, main table .t-meta { font-size: 0.75rem; }
+main table th, main table th button { font-size: 0.6875rem; }

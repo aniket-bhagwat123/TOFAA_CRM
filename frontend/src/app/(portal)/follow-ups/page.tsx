@@ -1,14 +1,15 @@
 "use client";
+import { CALL_TONE } from "@/lib/contact-styles";
 import { ArrowDown, ArrowUp, CalendarPlus, CheckCircle2, CircleSlash, List, Phone, Plus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ClientFollowUpSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
 import type { LeadTarget } from "@/components/crm/types";
 import { useLeadActions } from "@/components/crm/use-lead-actions";
 import { AddTaskSheet } from "@/components/followups/add-task-sheet";
 import { FollowUpDoneSheet } from "@/components/followups/done-sheet";
 import {
-  ActionRow, attemptLabel, type ColumnKey, dealName, dueMs, FlagChips, FollowUpCard, isEscalated, KIND_LABEL, KindChip, kindOf, SnoozeButton,
+  ActionRow, attemptLabel, type ColumnKey, dealName, DeleteButton, dueMs, FlagChips, FollowUpCard, isEscalated, KIND_LABEL, KindChip, kindOf, SnoozeButton,
   StageChip, TagChips, whenLabel,
 } from "@/components/followups/followup-card";
 import { LeadPanel } from "@/components/followups/lead-panel";
@@ -17,10 +18,11 @@ import { REPEAT_LIMIT, SnoozeSheet } from "@/components/followups/snooze-sheet";
 import { Avatar } from "@/components/ui/avatar";
 import { ClearFilters, FilterLabel, FilterSelect } from "@/components/ui/filter-bar";
 import { Button } from "@/components/ui/button";
+import { useDelete } from "@/components/ui/use-delete";
 import { BOARD_LIST, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { BoardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/hooks/use-api";
@@ -129,6 +131,7 @@ export default function FollowUpsPage() {
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const reload = () => void api.reload();
   const actions = useLeadActions(reload);
+  const remove = useDelete(reload);
   const set = (patch: Partial<Filters>) => setFilters((x) => ({ ...x, ...patch }));
   const showOwner = manager && !owner; // the "Whole team" view
 
@@ -150,6 +153,8 @@ export default function FollowUpsPage() {
     f.isClientTask ? finishClientTask(f) : f.meeting ? setDoneItem(f) : actions.logCall({ ...target(f), taskId: f.id });
   const handlers = (f: FollowUpItem) => ({
     onOpen: () => open(f), onCall: () => call(f), onWhatsApp: () => whatsapp(f), onLog: () => logOutcome(f), onSnooze: () => setSnoozing(f),
+    onDelete: () => remove.ask({ path: `/tasks/${f.id}`, title: "Delete this follow-up?", done: "Follow-up deleted",
+      message: `${dealName(f)}: it leaves the board and is not counted as done.${f.clientRequested ? " The client asked for this callback." : ""}` }),
   });
 
   const data = useMemo(() => {
@@ -173,6 +178,16 @@ export default function FollowUpsPage() {
   const dropDate = (c: ColumnKey) => (c === "today" ? todayIso() : c === "tomorrow" ? todayIso(1) : c === "laterThisWeek" ? todayIso(2) : todayIso(8));
   // Later this week and Later span several days, so a drop on its own column can still pick another day.
   const canDrop = (c: ColumnKey) => !!dragging && c !== "overdue" && (c !== dragging.from || c === "laterThisWeek" || c === "later");
+  // The expanded Later column and the faded columns move the cards. Chrome cancels a drag whose card moves while it is
+  // starting, so the board changes one tick later.
+  const startDrag = (item: FollowUpItem, from: ColumnKey) => window.setTimeout(() => setDragging({ item, from }), 0);
+  // Today can be scrolled out of sight when the card comes from the right: dragging near an edge scrolls the board.
+  const edgeScroll = (e: DragEvent<HTMLDivElement>) => {
+    if (!dragging) return;
+    const { left, right } = e.currentTarget.getBoundingClientRect();
+    if (e.clientX < left + 96) e.currentTarget.scrollLeft -= 24;
+    else if (e.clientX > right - 96) e.currentTarget.scrollLeft += 24;
+  };
   const drop = (c: ColumnKey) => {
     if (dragging && canDrop(c)) setMoving({ item: dragging.item, date: dropDate(c), label: COLUMNS.find((x) => x.key === c)!.label });
     setDragging(null); setDropOn(null);
@@ -184,7 +199,15 @@ export default function FollowUpsPage() {
 
       {/* Row 1: search, the view toggle and Add task */}
       <div className="flex flex-wrap items-center gap-2">
-        <SearchInput value={filters.q} onChange={(q) => set({ q })} placeholder="Search company, contact, phone" className="min-w-0 flex-1 sm:max-w-sm" />
+        <SearchInput value={filters.q} onChange={(q) => set({ q })} placeholder="Search company, contact, phone" className="min-w-0 flex-1 sm:max-w-xs" />
+        {data && total > 0 && (
+          <p className="flex flex-wrap items-center gap-1 text-[11px] font-medium">
+            <Count n={total} label="open" />
+            <Count n={week} label="this week" />
+            {data.overdue.length > 0 && <Count n={data.overdue.length} label="overdue" tone="bg-red-50 text-red-700" />}
+            {manager && postponed > 0 && <Count n={postponed} label="postponed" tone="bg-amber-50 text-amber-800" />}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {/* Layout of the open follow-ups */}
           <ViewToggle value={extra ? null : layout} onChange={setLayout} options={BOARD_LIST} />
@@ -197,7 +220,7 @@ export default function FollowUpsPage() {
         <Button onClick={() => setAdding(true)} className="h-10 min-h-0 shrink-0 whitespace-nowrap px-3.5"><Plus className="h-4 w-4" />Add task</Button>
       </div>
 
-      {/* Row 2: filters (an active one turns blue), Clear, and the counts on the right */}
+      {/* Row 2: filters (an active one turns blue) and Clear */}
       <div className="flex flex-wrap items-center gap-2">
         <FilterLabel />
         <FilterSelect label="Task type" value={filters.kind} onChange={(kind) => set({ kind })} all="All task types"
@@ -210,18 +233,10 @@ export default function FollowUpsPage() {
             options={[{ value: user.id, label: "Mine" }, ...(people.data ?? []).filter((p) => p.id !== user.id).map((p) => ({ value: p.id, label: p.fullName ?? "Unnamed" }))]} />
         )}
         <ClearFilters count={activeFilters} onClear={() => setFilters(NO_FILTERS)} />
-        <p className="t-meta w-full whitespace-nowrap sm:ml-auto sm:w-auto">
-          {data ? (total ? <>
-            <b className="font-semibold text-slate-700">{total}</b> open follow-up{total === 1 ? "" : "s"}
-            {" · "}<b className="font-semibold text-slate-700">{week}</b> due this week
-            {data.overdue.length ? <> · <b className="font-semibold text-red-600">{data.overdue.length} overdue</b></> : null}
-            {manager && postponed ? <> · <b className="font-semibold text-amber-700">{postponed} repeatedly postponed</b></> : null}
-          </> : "No open follow-ups") : " "}
-        </p>
       </div>
 
       {api.loading && !data ? (
-        <div className="flex flex-1 items-center justify-center"><Spinner /></div>
+        view === "board" ? <BoardSkeleton /> : <TableSkeleton columns={7} rows={8} />
       ) : api.error && !data ? (
         <StateView kind="error" message={api.error} onRetry={reload} />
       ) : !data ? null : view === "done" ? (
@@ -235,16 +250,16 @@ export default function FollowUpsPage() {
         <StateView kind="empty" title={filtered ? "No follow-ups match" : "All caught up"} message={filtered ? "Try another search or clear the filters." : "No open follow-ups. New ones appear here as you schedule them."} />
       ) : view === "list" ? (
         <>
-          <div className="hidden min-h-0 flex-1 md:flex"><ListView data={data} showOwner={showOwner} handlers={handlers} /></div>
+          <div className="hidden min-h-0 min-w-0 flex-1 md:flex"><ListView data={data} showOwner={showOwner} handlers={handlers} /></div>
           <MobileList data={data} showOwner={showOwner} handlers={handlers} onOpen={open} />
         </>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
+        <div onDragOver={edgeScroll} className="flex min-h-0 flex-1 gap-3 overflow-x-auto pb-1">
           {COLUMNS.map((c) => (c.key === "overdue" || (c.key === "later" && !dragging)) && data[c.key].length === 0 ? (
             // Nothing in Overdue or Later: a narrow strip instead of a full, empty column (so the board fits a laptop).
             <section key={c.key} aria-label={`${c.label}: none`} title={c.key === "overdue" ? "Nothing overdue" : "Nothing due after this week"} className={cn("flex w-11 shrink-0 flex-col items-center gap-3 rounded-2xl py-3", c.tone)}>
-              <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-500">0</span>
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 [writing-mode:vertical-rl] rotate-180">{c.label}</span>
+              <span className="rounded-full bg-white px-2 py-0.5 text-[12px] font-semibold text-slate-500">0</span>
+              <span className="text-[12px] font-semibold uppercase tracking-wide text-slate-500 [writing-mode:vertical-rl] rotate-180">{c.label}</span>
             </section>
           ) : (
             <section
@@ -258,9 +273,9 @@ export default function FollowUpsPage() {
               <header className="mb-2 flex items-center justify-between gap-2 px-1">
                 <div className="flex min-w-0 items-center gap-2">
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", c.dot)} />
-                  <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-600">{c.label}</span>
+                  <span className="truncate text-[12px] font-semibold uppercase tracking-wide text-slate-600">{c.label}</span>
                 </div>
-                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", c.key === "overdue" ? "bg-red-600 text-white" : "bg-white text-slate-600")}>{data[c.key].length}</span>
+                <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-semibold", c.key === "overdue" ? "bg-red-600 text-white" : "bg-white text-slate-600")}>{data[c.key].length}</span>
               </header>
               <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto overflow-x-hidden pr-0.5">
                 {dropOn === c.key && <p className="rounded-xl border-2 border-dashed border-brand/40 bg-white/70 py-3 text-center text-xs font-medium text-brand">Drop to move to {c.label.toLowerCase()}</p>}
@@ -269,7 +284,7 @@ export default function FollowUpsPage() {
                   <div key={f.id} onDragEnd={() => { setDragging(null); setDropOn(null); }}>
                     <FollowUpCard
                       f={f} when={whenLabel(f, c.key, data.date)} late={c.key === "overdue"} escalated={c.key === "overdue" && isEscalated(f, data.date)} snoozeOpen={snoozing?.id === f.id} showOwner={showOwner}
-                      onDragStart={f.meeting ? undefined : () => setDragging({ item: f, from: c.key })}
+                      onDragStart={f.meeting ? undefined : () => startDrag(f, c.key)}
                       {...handlers(f)}
                     />
                   </div>
@@ -287,9 +302,15 @@ export default function FollowUpsPage() {
       <FollowUpDoneSheet item={doneItem} onClose={() => setDoneItem(null)} onDone={reload} onMoveStage={(f, s) => actions.moveTo(target(f), s)} />
       <ClientFollowUpSheet target={clientTask} onClose={() => setClientTask(null)} onDone={(pid) => (pid ? router.push(`/projects/${pid}`) : reload())} />
       {actions.sheets}
+      {remove.dialog}
     </div>
   );
 }
+
+/** One small figure beside the search box. */
+const Count = ({ n, label, tone = "bg-slate-100 text-slate-600" }: { n: number; label: string; tone?: string }) => (
+  <span className={cn("whitespace-nowrap rounded-full px-2 py-0.5", tone)}><b className="font-semibold">{n}</b> {label}</span>
+);
 
 /** Done today / No next action: a button with a count badge; blue while that list is open. */
 function ListButton({ active, onClick, icon, count, tone, label }: {
@@ -301,12 +322,12 @@ function ListButton({ active, onClick, icon, count, tone, label }: {
       className={cn("pressable flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border px-3 text-sm font-medium",
         active ? "border-brand bg-brand-soft text-brand" : "border-slate-300/80 bg-white text-slate-600 hover:bg-slate-50")}>
       {icon}{label}
-      {count > 0 && <span className={cn("min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center text-[11px] font-semibold leading-none", active ? "bg-brand text-white" : badge)}>{count}</span>}
+      {count > 0 && <span className={cn("min-w-[1.25rem] rounded-full px-1.5 py-0.5 text-center text-[12px] font-semibold leading-none", active ? "bg-brand text-white" : badge)}>{count}</span>}
     </button>
   );
 }
 
-type Handlers = (f: FollowUpItem) => { onOpen: () => void; onCall: () => void; onWhatsApp: () => void; onLog: () => void; onSnooze: () => void };
+type Handlers = (f: FollowUpItem) => { onOpen: () => void; onCall: () => void; onWhatsApp: () => void; onLog: () => void; onSnooze: () => void; onDelete: () => void };
 type Board = Pick<FollowUpsView, "date" | "overdue" | "today" | "tomorrow" | "laterThisWeek" | "later">;
 
 type Row = { f: FollowUpItem; col: ColumnKey };
@@ -319,11 +340,12 @@ const noteOf = (f: FollowUpItem) =>
 function ListView({ data, showOwner, handlers }: { data: Board; showOwner: boolean; handlers: Handlers }) {
   const [asc, setAsc] = useState(true);
   const rows = useMemo(() => rowsOf(data).sort((a, b) => (dueMs(a.f) - dueMs(b.f)) * (asc ? 1 : -1)), [data, asc]);
-  const th = "px-3 py-2.5 font-semibold whitespace-nowrap";
+  const th = "px-2.5 py-2 font-semibold whitespace-nowrap";
   return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-slate-200/80 bg-white shadow-card">
-      <table className="w-full min-w-[72rem] text-left text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+      <table className="w-full min-w-[62rem] text-left text-sm">
+        <thead className="sticky top-0 z-10 bg-slate-50 text-[12px] uppercase tracking-wide text-slate-500">
           <tr>
             <th className={cn(th, "pl-4")} aria-sort={asc ? "ascending" : "descending"}>
               <button type="button" onClick={() => setAsc((x) => !x)} className="inline-flex items-center gap-1 uppercase hover:text-slate-800">
@@ -346,8 +368,8 @@ function ListView({ data, showOwner, handlers }: { data: Board; showOwner: boole
             const attempt = attemptLabel(f);
             return (
               <tr key={f.id} className={cn("align-middle", f.clientRequested && late && "bg-red-50/40")}>
-                <td className={cn("whitespace-nowrap py-3 pl-4 pr-3 font-medium", late ? "text-red-600" : "text-slate-700")}>{whenLabel(f, col, data.date, true)}</td>
-                <td className="max-w-[16rem] px-3 py-3">
+                <td className={cn("whitespace-nowrap py-2 pl-4 pr-2.5 font-medium", late ? "text-red-600" : "text-slate-700")}>{whenLabel(f, col, data.date, true)}</td>
+                <td className="max-w-[16rem] px-2.5 py-2">
                   <button type="button" onClick={h.onOpen} className="flex max-w-full items-center gap-2.5 text-left">
                     {showOwner && f.ownerName && <Tooltip label={f.ownerName}><Avatar src={f.ownerAvatarUrl} name={f.ownerName} size="xs" /></Tooltip>}
                     <span className="min-w-0">
@@ -356,16 +378,17 @@ function ListView({ data, showOwner, handlers }: { data: Board; showOwner: boole
                     </span>
                   </button>
                 </td>
-                <td className="px-3 py-3"><StageChip f={f} /></td>
-                <td className="px-3 py-3">
+                <td className="px-2.5 py-2"><StageChip f={f} /></td>
+                <td className="px-2.5 py-2">
                   <div className="flex flex-wrap items-center gap-1"><KindChip f={f} /><FlagChips f={f} late={late} escalated={late && isEscalated(f, data.date)} /></div>
                 </td>
-                <td className="px-3 py-3"><TagChips f={f} /></td>
-                <td className="whitespace-nowrap px-3 py-3 text-slate-700">{attempt ? attempt.replace("Attempt ", "") : <span className="text-slate-300">—</span>}</td>
-                <td className="max-w-[14rem] px-3 py-3"><span className="block truncate text-slate-600" title={noteOf(f) || undefined}>{noteOf(f) || <span className="text-slate-300">—</span>}</span></td>
-                <td className="py-3 pl-3 pr-4">
+                <td className="px-2.5 py-2"><TagChips f={f} /></td>
+                <td className="whitespace-nowrap px-2.5 py-2 text-slate-700">{attempt ? attempt.replace("Attempt ", "") : <span className="text-slate-300">—</span>}</td>
+                <td className="max-w-[14rem] px-2.5 py-2"><span className="block truncate text-slate-600" title={noteOf(f) || undefined}>{noteOf(f) || <span className="text-slate-300">—</span>}</span></td>
+                <td className="py-2 pl-2.5 pr-4">
                   <div className="flex items-center justify-end gap-1">
                     <ActionRow f={f} onCall={h.onCall} onWhatsApp={h.onWhatsApp} onLog={h.onLog} compact snooze={<SnoozeButton f={f} onSnooze={h.onSnooze} side="top" />} />
+                    <DeleteButton f={f} onDelete={h.onDelete} />
                   </div>
                 </td>
               </tr>
@@ -373,6 +396,7 @@ function ListView({ data, showOwner, handlers }: { data: Board; showOwner: boole
           })}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }
@@ -392,7 +416,7 @@ function MobileList({ data, showOwner, handlers, onOpen }: { data: Board & { don
     <div className="min-h-0 flex-1 space-y-5 overflow-y-auto md:hidden">
       {groups.map((g) => (
         <section key={g.label} aria-label={g.label} className="space-y-2.5">
-          <h2 className={cn("px-1 text-[11px] font-semibold uppercase tracking-wide", g.tone)}>{g.label} · {g.rows.length}</h2>
+          <h2 className={cn("px-1 text-[12px] font-semibold uppercase tracking-wide", g.tone)}>{g.label} · {g.rows.length}</h2>
           {g.rows.length === 0 && <p className="px-1 text-xs text-slate-400">Nothing here.</p>}
           {g.rows.map(({ f, col }) => (
             <FollowUpCard key={f.id} f={f} when={whenLabel(f, col, data.date, col !== "overdue" && col !== "today")} late={col === "overdue"}
@@ -401,7 +425,7 @@ function MobileList({ data, showOwner, handlers, onOpen }: { data: Board & { don
         </section>
       ))}
       <section aria-label="Done" className="space-y-2.5">
-        <h2 className="px-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Done · {data.doneToday.length}</h2>
+        <h2 className="px-1 text-[12px] font-semibold uppercase tracking-wide text-emerald-700">Done · {data.doneToday.length}</h2>
         {data.doneToday.length === 0 ? <p className="px-1 text-xs text-slate-400">Nothing done yet today.</p> : <DoneList items={data.doneToday} showOwner={showOwner} onOpen={onOpen} />}
       </section>
     </div>
@@ -427,9 +451,9 @@ function NoActionView({ rows, showOwner, onOpen, onCall, onSchedule }: {
             {showOwner && l.ownerName && <Tooltip label={l.ownerName}><Avatar name={l.ownerName} size="xs" /></Tooltip>}
             <div className="flex items-center gap-1.5">
               <Tooltip label={l.phone ? `Call ${l.phone}` : "No phone number"}>
-                <Button variant="secondary" disabled={!l.phone} onClick={() => onCall(l)} className="h-9 min-h-0 gap-1.5 whitespace-nowrap px-2.5 text-[13px]"><Phone className="h-4 w-4" />Call</Button>
+                <Button disabled={!l.phone} onClick={() => onCall(l)} className={cn("h-9 min-h-0 gap-1.5 whitespace-nowrap px-2.5 text-xs", CALL_TONE)}><Phone className="h-4 w-4" />Call</Button>
               </Tooltip>
-              <Button onClick={() => onSchedule(l)} className="h-9 min-h-0 gap-1.5 whitespace-nowrap px-2.5 text-[13px]"><CalendarPlus className="h-4 w-4" />Set next action</Button>
+              <Button onClick={() => onSchedule(l)} className="h-9 min-h-0 gap-1.5 whitespace-nowrap px-2.5 text-xs"><CalendarPlus className="h-4 w-4" />Set next action</Button>
             </div>
           </li>
         ))}
@@ -441,7 +465,11 @@ function NoActionView({ rows, showOwner, onOpen, onCall, onSchedule }: {
 /** Done view: what was finished today, newest first, with its outcome. */
 function DoneView({ items, showOwner, onOpen }: { items: FollowUpItem[]; showOwner: boolean; onOpen: (f: FollowUpItem) => void }) {
   if (!items.length) return <StateView kind="empty" title="Nothing done yet today" message="Follow-ups you finish today (with their outcome) show up here." />;
-  return <div className="min-h-0 flex-1 overflow-y-auto"><DoneList items={items} showOwner={showOwner} onOpen={onOpen} /></div>;
+  return (
+    <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+      <DoneList items={items} showOwner={showOwner} onOpen={onOpen} />
+    </div>
+  );
 }
 
 function DoneList({ items, showOwner, onOpen }: { items: FollowUpItem[]; showOwner: boolean; onOpen: (f: FollowUpItem) => void }) {

@@ -33,7 +33,8 @@ def test_roles():
 
     p = Profile(id="1", email="a@b.co", role="admin")
     assert p.role == Role.ADMIN
-    assert {r.value for r in Role} == {"admin", "sales_manager", "sales_executive", "finance", "kam"}
+    assert {r.value for r in Role} == {"admin", "sales_manager", "finance", "kam"}
+    assert Profile(id="2", role="sales_executive").role == Role.KAM  # accounts saved with the old name
 
 
 def test_es256_token_verified_with_jwks(monkeypatch):

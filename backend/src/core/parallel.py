@@ -3,6 +3,7 @@
 Each Supabase call is a network round trip, so doing five in a row costs five round trips. These
 helpers overlap them. Everything shares one small thread pool.
 """
+import contextvars
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable
@@ -15,7 +16,8 @@ def par(*calls: Callable[[], Any]) -> list[Any]:
     """Run the callables together and return their results in order. The first error is raised."""
     if len(calls) == 1:
         return [calls[0]()]
-    futures = [_pool.submit(c) for c in calls]
+    # Each call keeps the request's context (for example the client picked in the header).
+    futures = [_pool.submit(contextvars.copy_context().run, c) for c in calls]
     return [f.result() for f in futures]
 
 

@@ -23,7 +23,7 @@ export function BottomNav({ user }: { user: Profile }) {
             key={href}
             href={href}
             className={cn(
-              "pressable flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium text-slate-500",
+              "pressable flex flex-1 flex-col items-center gap-0.5 py-2 text-[12px] font-medium text-slate-500",
               path.startsWith(href) && "text-brand",
             )}
           >

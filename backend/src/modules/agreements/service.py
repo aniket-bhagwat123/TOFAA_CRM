@@ -1,6 +1,7 @@
 """The agreement: prepared in the CRM (packages, scope, commercials, terms, signees), printed as a PDF, then the
 checklist (sent, signed, invoice raised, payment received) and the payment request."""
 import logging
+import secrets
 from decimal import Decimal
 
 from src.core.audit import write_audit
@@ -123,7 +124,7 @@ def _terms_key(terms: list[dict]) -> list[tuple[str, str]]:
 
 
 def terms_status_for(user: Profile, terms: list[dict], before: dict) -> str:
-    """Standard terms need nobody. Changed or extra terms from an executive wait for a manager, unless they are exactly
+    """Standard terms need nobody. Changed or extra terms from a KAM wait for a manager, unless they are exactly
     the terms already approved. Managers and admins approve their own."""
     if _terms_key(terms) == _terms_key(schemas.DEFAULT_TERMS):
         return "standard"
@@ -199,7 +200,7 @@ def make_pdf(user: Profile, lead_id: str) -> tuple[bytes, str]:
     if not details:
         raise AppError("Prepare the agreement first, then download it.", status_code=409)
     terms = (rows[0] or {}).get("terms_status")
-    if terms in ("pending", "rejected") and user.role == Role.SALES_EXECUTIVE:
+    if terms in ("pending", "rejected") and user.role == Role.KAM:
         raise AppError(
             "The custom contract terms are waiting for your manager's approval." if terms == "pending"
             else "Your manager rejected the custom contract terms. Change them and save again.",
@@ -227,12 +228,11 @@ def _agreement_total(lead_id: str):
         return None
 
 
-def request_payment(user: Profile, lead_id: str, invoice_number: str, amount) -> dict:
+def request_payment(user: Profile, lead_id: str, invoice_number: str | None, amount) -> dict:
     lead = leads.get_lead_row(user, lead_id)
-    invoice = (invoice_number or "").strip()
+    # The screen does not ask for an invoice number. The column is required and unique, so a reference stands in.
+    invoice = (invoice_number or "").strip() or f"PR-{secrets.token_hex(4).upper()}"
     errors = []
-    if not invoice:
-        errors.append({"field": "invoiceNumber", "message": "Enter the invoice number."})
     money = None
     try:
         money = to_money(amount if amount not in (None, "") else (_agreement_total(lead_id) or lead.get("quote_amount") or 0))
@@ -248,7 +248,7 @@ def request_payment(user: Profile, lead_id: str, invoice_number: str, amount) ->
     db = get_service_client()
     open_req = db.table("payment_requests").select("invoice_number").eq("lead_id", lead_id).in_("status", ["requested", "partial"]).limit(1).execute().data
     if open_req:
-        raise ConflictError(f"A payment request is already open for this lead (invoice {open_req[0]['invoice_number']}).")
+        raise ConflictError(f"A payment request is already open for this lead (reference {open_req[0]['invoice_number']}).")
     try:
         req = db.table("payment_requests").insert(
             {"lead_id": lead_id, "invoice_number": invoice, "amount": float(money), "requested_by": user.id}
@@ -261,8 +261,8 @@ def request_payment(user: Profile, lead_id: str, invoice_number: str, amount) ->
     finance = [r["id"] for r in db.table("profiles").select("id").in_("role", [Role.FINANCE.value, Role.ADMIN.value]).eq("is_active", True).execute().data]
     par(
         lambda: _upsert(lead_id, invoice_number=invoice, invoice_raised_at=now_ist().isoformat()),
-        lambda: add_activity(lead_id, user.id, "payment", outcome="requested", note=f"Payment requested: invoice {invoice}, {format_inr(money)}"),
-        *[(lambda f=f: notify(f, f"payreq:{req['id']}", "Payment requested", f"{company}: invoice {invoice}, {format_inr(money)}", "/payments")) for f in finance if f != user.id],
+        lambda: add_activity(lead_id, user.id, "payment", outcome="requested", note=f"Payment requested: {format_inr(money)} (reference {invoice})"),
+        *[(lambda f=f: notify(f, f"payreq:{req['id']}", "Payment requested", f"{company}: {format_inr(money)} (reference {invoice})", "/payments")) for f in finance if f != user.id],
     )
     write_audit(user.id, "payment_requested", "payment_requests", req["id"], {"invoice": invoice})
     return req

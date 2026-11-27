@@ -22,7 +22,7 @@ export type ExecutiveData = {
   meetings: { id: string; leadId: string; startsAt: string; kind: string; location?: string | null; companyName?: string; contactName?: string }[];
 };
 
-/** A sales executive's own numbers: pipeline, target, follow-ups, call statuses, quotations and the week's meetings. */
+/** A KAM's own sales numbers: pipeline, target, follow-ups, call statuses, quotations and the week's meetings. */
 export function ExecutiveDashboard({ d }: { d: ExecutiveData }) {
   return (
     <div className="space-y-5">
@@ -67,7 +67,7 @@ export function ExecutiveDashboard({ d }: { d: ExecutiveData }) {
             {[["To send", d.quotations.toSend, d.quotations.toSend ? "text-brand" : ""], ["Waiting approval", d.quotations.waitingApproval, d.quotations.waitingApproval ? "text-amber-600" : ""], ["Sent this month", d.quotations.sentThisMonth, ""]].map(([label, n, tone]) => (
               <div key={label as string} className="rounded-xl bg-slate-50 p-2.5">
                 <div className={cn("text-xl font-semibold tabular-nums text-slate-900", tone as string)}>{n as number}</div>
-                <div className="text-[11px] text-slate-500">{label as string}</div>
+                <div className="text-[12px] text-slate-500">{label as string}</div>
               </div>
             ))}
           </div>
@@ -80,7 +80,7 @@ export function ExecutiveDashboard({ d }: { d: ExecutiveData }) {
                     <span className="min-w-0 truncate">{q.companyName} <span className="text-xs text-slate-400">v{q.version} · {formatDate(q.createdAt)}</span></span>
                     <span className="flex shrink-0 items-center gap-2">
                       <span className="tabular-nums text-slate-700">{inrShort(q.total)}</span>
-                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", QUOTE_STATUS[q.status]?.tone)}>{QUOTE_STATUS[q.status]?.label ?? q.status}</span>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-medium", QUOTE_STATUS[q.status]?.tone)}>{QUOTE_STATUS[q.status]?.label ?? q.status}</span>
                     </span>
                   </Link>
                 </li>

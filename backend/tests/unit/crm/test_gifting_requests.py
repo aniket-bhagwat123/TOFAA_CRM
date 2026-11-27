@@ -10,7 +10,7 @@ LINKED = {"t-1": {"id": "c-1", "name": "Wendy"}}
 
 def test_other_roles_are_refused():
     with pytest.raises(ForbiddenError):
-        service.accounts(Profile.model_construct(id="u", role=Role.SALES_EXECUTIVE))
+        service.accounts(Profile.model_construct(id="u", role=Role.FINANCE))
 
 
 def test_only_own_accounts_are_sent_and_names_are_added(monkeypatch):
@@ -78,5 +78,12 @@ def test_new_items_are_only_made_for_the_persons_own_account(monkeypatch):
     service.create_occasion(user, "c-1", {"occasionName": "Holi", "occasionDate": "2027-03-01"})
     assert sent[0][0] == "/occasions" and sent[0][1]["tenantId"] == "t-1" and sent[0][1]["actorId"] == "u-9"
     with pytest.raises(NotFoundError):
-        service.create_request(user, "c-9", {})
+        service.create_request(user.model_copy(update={"role": Role.ADMIN}), "c-9", {})
     assert len(sent) == 1
+
+
+@pytest.mark.parametrize("role", [Role.KAM, Role("sales_executive")])
+def test_a_kam_cannot_create_a_gift_request(monkeypatch, role):
+    monkeypatch.setattr(service, "_call", lambda *a, **k: pytest.fail("must not call Gifting OS"))
+    with pytest.raises(ForbiddenError):
+        service.create_request(Profile.model_construct(id="u-9", full_name="Asha", role=role), "c-1", {})

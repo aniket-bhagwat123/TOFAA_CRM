@@ -1,16 +1,17 @@
 """Who may see which leads. Services call these because the service-role client bypasses RLS.
 
-Executives: own leads. Managers and Admin: everything, whoever added it (a manager's reach is set by the modules
+KAM (key account manager): own leads, client accounts, projects and follow-ups. Managers and Admin: everything, whoever added it (a manager's reach is set by the modules
 their role has, not by whose data it is).
-KAM (key account manager): what they own: their client accounts, those accounts' projects and follow-ups
-(orders for their accounts are scoped by account in orders.service). Finance has no lead access.
+Orders for a KAM's accounts and deals are scoped in orders.service. Finance has no lead access.
 """
 from src.core.cache import reference
 from src.core.errors import ForbiddenError
 from src.core.supabase import get_service_client
 from src.modules.auth.schemas import Profile, Role
 
-LEAD_ROLES = {Role.ADMIN, Role.SALES_MANAGER, Role.SALES_EXECUTIVE, Role.KAM}
+LEAD_ROLES = {Role.ADMIN, Role.SALES_MANAGER, Role.KAM}
+# Who may hand a lead to someone else. A KAM only their own leads (lead visibility is unchanged).
+ASSIGN_ROLES = {Role.ADMIN, Role.SALES_MANAGER, Role.KAM}
 TEAM_TTL = 30  # seconds. User edits invalidate it immediately (see users.service).
 
 

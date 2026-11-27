@@ -114,7 +114,7 @@ def test_manager_can_only_create_executives_into_own_team(db):
 def test_executive_cannot_create(db):
     db()
     with pytest.raises(ForbiddenError):
-        service.create_user(actor(Role.SALES_EXECUTIVE), body())
+        service.create_user(actor(Role.KAM), body())
 
 
 def test_phone_is_normalised_for_auth(db):

@@ -44,7 +44,26 @@ type Props = {
 /** The CRM / OS switch above the menu. */
 export function ModuleSwitch({ value, home, alert, collapsed, onTip, onTipEnd, className }: Props) {
   return (
-    <div role="group" aria-label="Module" className={cn("flex gap-1 rounded-xl bg-slate-100 p-1", collapsed && "flex-col", className)}>
+    <div
+      role="group"
+      aria-label="Module"
+      className={cn(
+        "flex gap-1 rounded-xl bg-slate-100 p-1",
+        className,
+        // Icon-only menu: a narrow upright toggle, like a light / dark switch.
+        collapsed && "relative mx-auto w-10 flex-col rounded-full shadow-inner ring-1 ring-inset ring-slate-200",
+      )}
+    >
+      {/* The knob slides to the open side: one item (2rem) plus the gap. */}
+      {collapsed && (
+        <span
+          aria-hidden="true"
+          className={cn(
+            "absolute left-1 top-1 h-8 w-8 rounded-full bg-brand shadow-md transition-transform duration-300 ease-out motion-reduce:transition-none",
+            value === "os" && "translate-y-9",
+          )}
+        />
+      )}
       {SIDES.map(({ value: side, label, icon: Icon }) => {
         const selected = side === value;
         const note = selected ? undefined : alert?.[side];
@@ -62,11 +81,14 @@ export function ModuleSwitch({ value, home, alert, collapsed, onTip, onTipEnd, c
             className={cn(
               "pressable relative flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-colors",
               selected ? "bg-brand text-white shadow-sm" : "text-slate-600 hover:bg-white",
+              // The knob carries the selected colour here, so the link itself stays clear above it.
+              collapsed && "w-8 flex-none rounded-full",
+              collapsed && selected && "bg-transparent shadow-none",
             )}
           >
             <Icon className="h-4 w-4 shrink-0" />
             {!collapsed && label}
-            {note && <span aria-hidden="true" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-600" />}
+            {note && <span aria-hidden="true" className={cn("absolute h-2 w-2 rounded-full bg-red-600", collapsed ? "right-0 top-0 ring-2 ring-slate-100" : "right-1.5 top-1.5")} />}
           </Link>
         );
       })}

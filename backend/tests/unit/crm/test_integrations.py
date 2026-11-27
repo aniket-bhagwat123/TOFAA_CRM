@@ -49,6 +49,16 @@ def test_shared_list_has_every_live_banner_and_only_display_fields(rows):
     assert shared[0] == {"id": "1", "title": "Diwali", "sort_order": 0, "image_url": "https://x.supabase.co/a?token=t"}
 
 
+def test_a_clients_dashboard_gets_its_own_banners_and_everyones(rows, monkeypatch):
+    rows[1]["company_ids"] = ["c-1"]
+    rows[2]["company_ids"] = ["c-2"]
+    monkeypatch.setattr(banners, "_company_of", lambda tenant: {"t-1": "c-1"}.get(tenant))
+    assert [b["id"] for b in banners.shared_live("t-1")] == ["1", "2"]
+    assert [b["id"] for b in banners.shared_live("t-unlinked")] == ["1"]
+    assert [b["id"] for b in banners.shared_live()] == ["1"]
+    assert "company_ids" not in banners.shared_live("t-1")[1]
+
+
 def test_endpoint_refuses_without_the_right_key(rows, monkeypatch):
     client = TestClient(app)
     monkeypatch.setattr(settings, "GIFTING_OS_API_KEY", "")

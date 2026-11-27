@@ -7,7 +7,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { PageHeader } from "@/components/ui/page-header";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { STAGE_LABEL, todayIso } from "@/lib/format";
@@ -126,7 +126,7 @@ export default function ReportsPage() {
         </select>
       </div>
 
-      {report.loading && !r && <div className="flex justify-center py-12"><Spinner /></div>}
+      {report.loading && !r && <TableSkeleton columns={7} rows={6} avatar={false} />}
       {report.error && !r && <StateView kind="error" message={report.error} onRetry={() => void report.reload()} />}
       {r && (
         <>
@@ -288,7 +288,7 @@ function PipelineCard({ rows }: { rows: Report["pipeline"] }) {
         return (
           <div key={g.key} className="space-y-1">
             {groups.length > 1 && (
-              <h3 className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+              <h3 className="flex items-center justify-between text-[12px] font-semibold uppercase tracking-wide text-slate-400">
                 <span>{g.title}</span><span className="normal-case tracking-normal">{inrShort(sub)}{total ? ` · ${Math.round((sub / total) * 100)}%` : ""}</span>
               </h3>
             )}

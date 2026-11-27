@@ -93,13 +93,13 @@ export function WhatsAppSheet({ target, onClose, onDone }: Props) {
                 <div key={m.id}>
                   {newDay && (
                     <div className="my-2 flex justify-center">
-                      <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[11px] font-medium text-slate-500 shadow-sm">{day}</span>
+                      <span className="rounded-full bg-white/90 px-2.5 py-0.5 text-[12px] font-medium text-slate-500 shadow-sm">{day}</span>
                     </div>
                   )}
                   <div className={cn("flex", out ? "justify-end" : "justify-start")}>
                     <div className={cn("max-w-[80%] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm", out ? "rounded-br-md bg-[#d9fdd3] text-slate-900" : "rounded-bl-md bg-white text-slate-900")}>
                       <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{m.body}</p>
-                      <p className="mt-0.5 text-right text-[10px] text-slate-500">{formatTime(m.createdAt)}</p>
+                      <p className="mt-0.5 text-right text-[11px] text-slate-500">{formatTime(m.createdAt)}</p>
                     </div>
                   </div>
                 </div>

@@ -10,7 +10,7 @@ const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.s
 
 const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
   <div>
-    <div className="text-[11px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
+    <div className="text-[12px] font-medium uppercase tracking-wide text-slate-400">{label}</div>
     <div className={cn("text-lg font-semibold tracking-tight text-slate-900", tone)}>{value}</div>
   </div>
 );
@@ -24,7 +24,7 @@ export function TargetCard({ card }: { card: TargetCardData }) {
       <div className="flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><Target className="h-4 w-4 text-brand" /> {monthLabel(card.month)}</h2>
         {!none && (
-          <span className={cn("rounded-full px-2.5 py-0.5 text-[11px] font-semibold", card.healthy ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
+          <span className={cn("rounded-full px-2.5 py-0.5 text-[12px] font-semibold", card.healthy ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700")}>
             {card.gap === 0 ? "Target reached" : card.healthy ? "Pipeline healthy" : "Pipeline is thin"}
           </span>
         )}

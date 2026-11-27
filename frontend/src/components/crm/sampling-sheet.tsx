@@ -256,7 +256,7 @@ function ItemCard({ index, item, error, onPatch, onRemove, onUpload }: CardProps
   return (
     <div className={cn("space-y-3 rounded-2xl border bg-slate-50/70 p-3 sm:p-4", error ? "border-red-300" : "border-slate-200")}>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="shrink-0 rounded-md bg-sky-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-sky-800 ring-1 ring-sky-200">Item {no}</span>
+        <span className="shrink-0 rounded-md bg-sky-100 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-wide text-sky-800 ring-1 ring-sky-200">Item {no}</span>
         {item.packageName && <span className="truncate text-xs font-medium text-slate-500">{item.packageName}</span>}
         <button type="button" onClick={onRemove} className="pressable ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600">
           <Trash2 className="h-3.5 w-3.5" /> Remove
@@ -278,7 +278,7 @@ function ItemCard({ index, item, error, onPatch, onRemove, onUpload }: CardProps
               ) : (
                 <a href={f.url ?? undefined} target="_blank" rel="noopener noreferrer" className="flex h-full w-full flex-col items-center justify-center gap-1 p-2 text-center text-slate-500 hover:text-brand">
                   <FileText className="h-6 w-6" />
-                  <span className="line-clamp-2 break-all text-[10px] leading-tight">{f.name}</span>
+                  <span className="line-clamp-2 break-all text-[11px] leading-tight">{f.name}</span>
                 </a>
               )}
               <button type="button" aria-label={`Remove ${f.name}`} onClick={() => onPatch((d) => ({ files: d.files.filter((x) => x.path !== f.path) }))} className="pressable absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-slate-900/60 text-white hover:bg-red-600">

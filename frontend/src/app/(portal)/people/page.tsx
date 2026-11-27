@@ -9,13 +9,14 @@ import { ImportSheet } from "@/components/people/import-sheet";
 import { RELATIONSHIPS, UPCOMING } from "@/components/people/labels";
 import { PeopleTable } from "@/components/people/people-table";
 import { PersonPanel } from "@/components/people/person-panel";
-import { PersonSheet } from "@/components/people/person-sheet";
+import { RecipientPanel } from "@/components/people/wizard/recipient-panel";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { FilterMenu } from "@/components/ui/filter-menu";
-import { PAGE_SIZES, Pagination } from "@/components/ui/pagination";
+import { PAGE_SIZE, PAGE_SIZES, Pagination } from "@/components/ui/pagination";
+import { useClientFirst } from "@/components/os/client-first";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { downloadFile } from "@/features/media/download";
 import { useApi } from "@/hooks/use-api";
@@ -23,6 +24,8 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
+import { pickedClient } from "@/lib/selected-client";
+import { canDeletePeople } from "@/lib/roles";
 import type { ClientSummary } from "@/types/crm";
 import type { PeopleGroup, PeopleList, PeopleSummary, Person } from "@/types/people";
 
@@ -33,7 +36,7 @@ const PAGE_SIZE_KEY = "people.pageSize";
 export default function PeoplePage() {
   const role = useAppSelector((s) => s.auth.session?.profile.role);
   const router = useRouter();
-  const allowed = role === "admin" || role === "kam";
+  const allowed = role === "admin" || role === "sales_manager" || role === "kam";
 
   const [tab, setTab] = useState<"people" | "groups">("people");
   const [search, setSearch] = useState("");
@@ -46,7 +49,7 @@ export default function PeoplePage() {
   const [status, setStatus] = useState("");
   const [sort, setSort] = useState<{ key: SortKey; desc: boolean }>({ key: "created", desc: true });
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   // The chosen rows-per-page is remembered on this device.
   useEffect(() => { try { const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY)); if (PAGE_SIZES.includes(saved)) setPageSize(saved); } catch { /* default is fine */ } }, []);
@@ -69,12 +72,13 @@ export default function PeoplePage() {
     companyId: companyId || undefined, search: q || undefined, relationship: relationship || undefined, city: city || undefined,
     groupId: groupId || undefined, upcomingDays: upcoming || undefined, status: status || "ACTIVE",
   };
+  const mayDelete = canDeletePeople(role);
   const list = useApi<PeopleList>(allowed ? "/people" : null, { ...filters, page, limit: pageSize, sort: sort.key, order: sort.desc ? "desc" : "asc" });
   const summary = useApi<PeopleSummary>(allowed ? "/people/summary" : null, { companyId: companyId || undefined });
   const clients = useApi<ClientSummary[]>(allowed ? "/clients" : null);
   const groups = useApi<PeopleGroup[]>(allowed ? "/people-groups" : null, { companyId: companyId || undefined });
 
-  const accounts = useMemo(() => (clients.data ?? []).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)), [clients.data]);
+  const accounts = useMemo(() => (clients.data ?? []).filter((c) => !pickedClient() || c.id === pickedClient()!.id).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name)), [clients.data]);
   const active = [companyId, relationship, city, groupId, upcoming, status].filter(Boolean).length;
 
   useEffect(() => { if (role && !allowed) router.replace("/dashboard"); }, [role, allowed, router]);
@@ -89,6 +93,11 @@ export default function PeoplePage() {
   const pickedIds = [...selected];
   // Groups hold people of one client, so "Add to group" needs the selection to share an account.
   const pickedCompany = picked.length && picked.every((p) => p.companyId === picked[0].companyId) && picked.length === selected.size ? picked[0].companyId : null;
+  // Adding, importing and grouping need one client: ask first when all are shown.
+  const inView = companyId || pickedClient()?.id;
+  const addAsk = useClientFirst({ active: adding, fixed: inView, accounts, onCancel: () => setAdding(false) });
+  const importAsk = useClientFirst({ active: importing, fixed: inView, accounts, onCancel: () => setImporting(false) });
+  const groupAsk = useClientFirst({ active: !!grouping, fixed: pickedCompany ?? inView, accounts, onCancel: () => setGrouping(null) });
   const groupChoices = (groups.data ?? []).filter((g) => g.companyId === pickedCompany);
 
   async function bulkStatus(next: "ACTIVE" | "ARCHIVED", ids = pickedIds) {
@@ -210,12 +219,12 @@ export default function PeoplePage() {
                 {status === "ARCHIVED"
                   ? <Button variant="secondary" loading={busy} onClick={() => void bulkStatus("ACTIVE")}><ArchiveRestore className="h-4 w-4" />Restore</Button>
                   : <Button variant="secondary" loading={busy} onClick={() => void bulkStatus("ARCHIVED")}><Archive className="h-4 w-4" />Archive</Button>}
-                <Button variant="secondary" className="text-red-600" onClick={() => setRemoving(pickedIds)}><Trash2 className="h-4 w-4" />Delete</Button>
+                {mayDelete && <Button variant="secondary" className="text-red-600" onClick={() => setRemoving(pickedIds)}><Trash2 className="h-4 w-4" />Delete</Button>}
               </div>
             </div>
           )}
 
-          {list.loading && !list.data && <div className="flex justify-center py-12"><Spinner /></div>}
+          {list.loading && !list.data && <TableSkeleton columns={6} rows={8} />}
           {list.error && !list.data && <StateView kind="error" message={list.error} onRetry={reload} />}
           {list.data && items.length === 0 && (
             active || q
@@ -235,7 +244,7 @@ export default function PeoplePage() {
               onOpen={(p) => setViewing(p.id)}
               onEdit={(p) => setEditing(p)}
               onArchive={(p) => void bulkStatus(p.status === "ARCHIVED" ? "ACTIVE" : "ARCHIVED", [p.id])}
-              onDelete={(p) => setRemoving([p.id])}
+              onDelete={mayDelete ? (p) => setRemoving([p.id]) : undefined}
             />
           )}
           {list.data && list.data.total > 0 && (
@@ -246,11 +255,12 @@ export default function PeoplePage() {
         </>
       )}
 
-      <PersonSheet open={adding || !!editing} person={editing} accounts={accounts} defaultCompanyId={companyId || undefined}
+      {addAsk.dialog}{importAsk.dialog}{groupAsk.dialog}
+      <RecipientPanel open={(adding && addAsk.ready) || !!editing} person={editing} accounts={editing ? accounts : addAsk.accounts} defaultCompanyId={editing ? companyId || undefined : addAsk.clientId}
         onClose={() => { setAdding(false); setEditing(null); }} onSaved={() => reload()} />
       <PersonPanel personId={viewing} onClose={() => setViewing(null)} onEdit={(p) => setEditing(p)} onChanged={reload} />
-      <ImportSheet open={importing} accounts={accounts} defaultCompanyId={companyId || undefined} onClose={() => setImporting(false)} onDone={reload} />
-      <GroupSheet open={!!grouping} group={null} accounts={accounts} defaultCompanyId={pickedCompany ?? undefined} presetIds={grouping ?? undefined}
+      <ImportSheet open={importing && importAsk.ready} accounts={importAsk.accounts} defaultCompanyId={importAsk.clientId} onClose={() => setImporting(false)} onDone={reload} />
+      <GroupSheet open={!!grouping && groupAsk.ready} group={null} accounts={groupAsk.accounts} defaultCompanyId={groupAsk.clientId} presetIds={grouping ?? undefined}
         onClose={() => setGrouping(null)} onSaved={() => { setSelected(new Set()); reload(); }} />
       <DeleteDialog open={!!removing} title={removing && removing.length > 1 ? `Delete ${removing.length} people?` : "Delete this person?"}
         message="They leave every list and group. Their history is kept." loading={busy} onConfirm={() => void remove()} onCancel={() => setRemoving(null)} />

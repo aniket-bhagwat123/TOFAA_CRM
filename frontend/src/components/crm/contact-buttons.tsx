@@ -1,5 +1,7 @@
 "use client";
 import { MessageCircle, Phone } from "lucide-react";
+import { CALL_TONE, CONTACT_ICON, WHATSAPP_TONE } from "@/lib/contact-styles";
+import { cn } from "@/lib/utils";
 
 type Props = { onCall: () => void; onWhatsApp: () => void; disabled?: boolean };
 
@@ -12,7 +14,7 @@ export function ContactButtons({ onCall, onWhatsApp, disabled }: Props) {
         onClick={onCall}
         disabled={disabled}
         aria-label="Call"
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 disabled:opacity-40"
+        className={cn(CONTACT_ICON, CALL_TONE)}
       >
         <Phone className="h-4 w-4" />
       </button>
@@ -20,7 +22,7 @@ export function ContactButtons({ onCall, onWhatsApp, disabled }: Props) {
         type="button"
         onClick={onWhatsApp}
         aria-label="WhatsApp"
-        className="flex h-10 w-10 items-center justify-center rounded-full bg-green-50 text-green-700 hover:bg-green-100"
+        className={cn(CONTACT_ICON, WHATSAPP_TONE)}
       >
         <MessageCircle className="h-4 w-4" />
       </button>

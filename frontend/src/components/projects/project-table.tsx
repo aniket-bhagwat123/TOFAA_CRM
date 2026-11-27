@@ -1,4 +1,5 @@
 "use client";
+import { CALL_TONE, CONTACT_ICON, WHATSAPP_TONE } from "@/lib/contact-styles";
 import { MessageCircle, Pencil, Phone } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -81,12 +82,12 @@ export function ProjectTable({ projects, showOwner, canReassign, actions, onEdit
                 </TableCell>
                 {showOwner && <TableCell><span className="t-body block max-w-[9rem] truncate text-slate-700">{p.owner?.fullName ?? "—"}</span></TableCell>}
                 <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="-ml-2 flex items-center gap-0.5">
+                  <div className="-ml-2 flex items-center gap-1.5">
                     <Tooltip label={!p.contact.phone ? "No phone number" : closed ? "Project is closed" : "Call"}>
-                      <button type="button" aria-label={`Call ${p.contact.name}`} disabled={!p.contact.phone || closed} onClick={stop(() => actions.call(t))} className={iconButton}><Phone className="h-4 w-4" /></button>
+                      <button type="button" aria-label={`Call ${p.contact.name}`} disabled={!p.contact.phone || closed} onClick={stop(() => actions.call(t))} className={cn(CONTACT_ICON, CALL_TONE)}><Phone className="h-4 w-4" /></button>
                     </Tooltip>
                     <Tooltip label={p.contact.phone ? "Send WhatsApp" : "No phone number"}>
-                      <button type="button" aria-label={`WhatsApp ${p.contact.name}`} disabled={!p.contact.phone} onClick={stop(() => actions.whatsapp(t))} className={iconButton}><MessageCircle className="h-4 w-4" /></button>
+                      <button type="button" aria-label={`WhatsApp ${p.contact.name}`} disabled={!p.contact.phone} onClick={stop(() => actions.whatsapp(t))} className={cn(CONTACT_ICON, WHATSAPP_TONE)}><MessageCircle className="h-4 w-4" /></button>
                     </Tooltip>
                     <Tooltip label="Edit">
                       <button type="button" aria-label={`Edit ${p.projectTitle ?? p.company.name}`} onClick={stop(() => onEdit(p))} className={iconButton}><Pencil className="h-4 w-4" /></button>

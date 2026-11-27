@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { BoardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useAllPages } from "@/hooks/use-all-pages";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatDate } from "@/lib/format";
@@ -49,7 +50,6 @@ export default function OrdersPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [owner, setOwner] = useState("");
-  const [page, setPage] = useState(1);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<{ order: Order; step: Step } | null>(null);
   const [layout, setLayout] = useState<"board" | "table">("board");
@@ -63,9 +63,9 @@ export default function OrdersPage() {
     setLayout(v);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
   };
-  const list = useApi<OrdersData>("/orders", { search: q || undefined, status: status || undefined, ownerId: owner || undefined, page, limit: 20 });
+  const list = useAllPages<OrdersData>("/orders", { search: q || undefined, status: status || undefined, ownerId: owner || undefined });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
-  const reset = (fn: () => void) => { fn(); setPage(1); };
+  const reset = (fn: () => void) => fn();
   const counts = list.data?.counts;
 
   async function move(o: Order, step: Step, note?: string) {
@@ -107,7 +107,7 @@ export default function OrdersPage() {
         {STEPS.map((s) => chip(s.key, s.label, counts?.[s.key]))}
       </div>
 
-      {list.loading && !list.data && <div className="flex justify-center py-12"><Spinner /></div>}
+      {list.loading && !list.data && (layout === "board" ? <BoardSkeleton /> : <TableSkeleton columns={7} rows={8} />)}
       {list.error && !list.data && <StateView kind="error" message={list.error} onRetry={() => void list.reload()} />}
       {list.data && list.data.items.length === 0 && <StateView kind="empty" title="No orders" message={q || status || owner ? "Try a different search or filter." : "A deal becomes an order when its payment is confirmed (Closed Won)."} />}
 
@@ -117,13 +117,6 @@ export default function OrdersPage() {
         </ul>
       ) : (
         !!list.data?.items.length && <OrdersTable orders={list.data.items} busyId={busy} onMove={(o, step) => setConfirm({ order: o, step })} />
-      )}
-      {list.data && list.data.meta.pages > 1 && (
-        <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
-          <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          <span>Page {page} of {list.data.meta.pages} · {list.data.meta.total} orders</span>
-          <Button variant="secondary" disabled={page >= list.data.meta.pages} onClick={() => setPage(page + 1)}>Next</Button>
-        </div>
       )}
       <ConfirmStep
         target={confirm}
@@ -239,8 +232,8 @@ function OrderCard({ o, busy, onMove }: { o: Order; busy: boolean; onMove: (step
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <Link href={o.pipeline === "client" ? `/projects/${o.id}` : `/leads/${o.id}`} className="truncate font-semibold text-slate-900 hover:text-brand">{o.company.name}</Link>
-              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", status.tone)}>{status.pill}</span>
-              {o.orderNumber && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600">{o.orderNumber}</span>}
+              <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-semibold", status.tone)}>{status.pill}</span>
+              {o.orderNumber && <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[12px] font-semibold text-slate-600">{o.orderNumber}</span>}
             </div>
             <div className="truncate text-xs text-slate-500">
               {o.contact.name}{o.owner?.fullName ? ` · ${o.owner.fullName}` : ""}{o.closedAt ? ` · won ${formatDate(o.closedAt)}` : ""}
@@ -281,7 +274,7 @@ function OrderCard({ o, busy, onMove }: { o: Order; busy: boolean; onMove: (step
                     </span>
                   )}
                 </span>
-                <span className={cn("text-[11px] font-medium leading-tight sm:text-xs", done ? s.text : current ? "text-slate-900" : "text-slate-400")}>{s.label}</span>
+                <span className={cn("text-[12px] font-medium leading-tight sm:text-xs", done ? s.text : current ? "text-slate-900" : "text-slate-400")}>{s.label}</span>
               </li>
             );
           })}

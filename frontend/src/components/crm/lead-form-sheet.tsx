@@ -41,7 +41,7 @@ export function LeadFormSheet({ open, onClose, onCreated }: Props) {
     reset(); setDups([]); setUseExisting(false); setPhoto(null); setMore(false);
   }, [open, reset]);
 
-  // Live duplicate check: the executive sees "already exists" before finishing the form.
+  // Live duplicate check: the KAM sees "already exists" before finishing the form.
   useEffect(() => {
     if (!open) return;
     if (company.trim().length < 3 && phone.trim().length < 7 && !email.includes("@")) { setDups([]); return; }

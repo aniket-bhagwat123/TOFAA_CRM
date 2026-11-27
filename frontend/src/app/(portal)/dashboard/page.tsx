@@ -18,7 +18,6 @@ import { useAppSelector } from "@/store/hooks";
 type DashboardData = { role: string } & Partial<CompanyData & ExecutiveData & FinanceData & KamData>;
 
 const INTRO: Record<string, string> = {
-  sales_executive: "",
   sales_manager: "Pipeline, target and what needs attention across the company.",
   admin: "",
   finance: "Payments waiting, received this month, and the ERP connection.",
@@ -43,7 +42,7 @@ export default function DashboardPage() {
           role === "sales_manager" ? (
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => setTargetsOpen(true)}><Target className="h-4 w-4" /> Targets</Button>
-              <Button variant="secondary" onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add executive</Button>
+              <Button variant="secondary" onClick={() => setAdding(true)}><UserPlus className="h-4 w-4" /> Add KAM</Button>
             </div>
           ) : undefined
         }
@@ -51,18 +50,18 @@ export default function DashboardPage() {
       {data.loading && !d && <div className="flex justify-center py-12"><Spinner /></div>}
       {data.error && !d && <StateView kind="error" message={data.error} onRetry={() => void data.reload()} />}
       {d && (role === "admin" || role === "sales_manager") && <CompanyDashboard d={d as CompanyData} admin={role === "admin"} />}
-      {role === "sales_executive" && (
+      {role === "kam" && (
         <div className="space-y-5">
           <TodayPanel />
           {d && <ExecutiveDashboard d={d as ExecutiveData} />}
+          {d && <KamDashboard d={d as KamData} />}
         </div>
       )}
       {d && role === "finance" && <FinanceDashboard d={d as FinanceData} />}
-      {d && role === "kam" && <KamDashboard d={d as KamData} />}
       {role === "sales_manager" && (
         <>
           <TargetsModal open={targetsOpen} onClose={() => setTargetsOpen(false)} onSaved={() => void data.reload()} />
-          <UserSheet open={adding} roles={["sales_executive"]} managers={[]} onClose={() => setAdding(false)} onDone={() => void data.reload()} />
+          <UserSheet open={adding} roles={["kam"]} managers={[]} onClose={() => setAdding(false)} onDone={() => void data.reload()} />
         </>
       )}
     </div>

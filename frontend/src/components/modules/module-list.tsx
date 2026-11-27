@@ -18,7 +18,7 @@ import { FormPanel } from "../ui/form-panel";
 import { InputField, TextareaField } from "../ui/input-field";
 import { PageHeader } from "../ui/page-header";
 import { SearchInput } from "../ui/search-input";
-import { Spinner } from "../ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "../ui/status-badge";
 
 function RecordForm({ fields, initial, onSubmit, saving }: {
@@ -115,7 +115,7 @@ export function ModuleList({ config }: { config: ModuleConfig }) {
       <Card>
         <div className="mb-4"><SearchInput value={search} onChange={setSearch} /></div>
         {loading && !data ? (
-          <div className="flex justify-center py-12"><Spinner /></div>
+          <TableSkeleton columns={4} rows={6} bare />
         ) : error ? (
           <div className="py-8 text-center text-sm text-red-600">{error} <button className="underline" onClick={load}>Retry</button></div>
         ) : !data?.items.length ? (

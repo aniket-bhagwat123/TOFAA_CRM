@@ -214,6 +214,8 @@ export type ClientContact = { id: string; name: string; designation?: string | n
 export type ClientSummary = {
   id: string;
   name: string;
+  logoUrl?: string | null; // the client's logo in Gifting OS
+  giftingInactive?: boolean; // switched off there
   city?: string | null;
   kind?: string | null;
   clientSince?: string | null;

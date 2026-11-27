@@ -4,7 +4,7 @@ from src.core.errors import AppError, ConflictError, NotFoundError
 from src.core.supabase import get_service_client
 from src.modules.auth.schemas import Profile
 from src.modules.people import schemas
-from src.modules.people.service import _db, client_account, company_scope
+from src.modules.people.service import _db, client_account, company_scope, require_delete
 
 SELECT = "id,company_id,name,created_at,updated_at,company:companies(name),members:recipient_group_members(recipient_id)"
 
@@ -97,6 +97,7 @@ def update(user: Profile, group_id: str, body: schemas.GroupUpdate) -> dict:
 
 
 def delete(user: Profile, group_id: str) -> None:
+    require_delete(user)
     _group(user, group_id)
     get_service_client().table("recipient_groups").delete().eq("id", group_id).execute()  # members go with it
 

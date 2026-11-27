@@ -5,10 +5,15 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { InputField } from "@/components/ui/input-field";
+import { SelectField } from "@/components/ui/select-field";
 import { Sheet } from "@/components/ui/sheet";
 import { errorData, fieldErrors, statusOf } from "@/lib/api-errors";
 import { EMAIL_MSG, isEmail, isPhone10, PHONE_MSG } from "@/lib/validation";
+import { useApi } from "@/hooks/use-api";
+import { isManager } from "@/lib/roles";
 import { apiClient, errorMessage } from "@/services/api-client";
+import { useAppSelector } from "@/store/hooks";
+import type { AssignableUser } from "@/types/crm";
 
 type Props = { open: boolean; onClose: () => void; onDone: (id: string) => void };
 const EMPTY = { companyName: "", contactName: "", phone: "", email: "", designation: "", city: "" };
@@ -19,9 +24,13 @@ export function AddClientSheet({ open, onClose, onDone }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [existing, setExisting] = useState<{ companyId: string; isClient: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
+  const role = useAppSelector((s) => s.auth.session?.profile.role);
+  const assigns = !!role && isManager(role);
+  const people = useApi<AssignableUser[]>(open && assigns ? "/users/assignable" : null);
+  const [kam, setKam] = useState("");
   const set = (k: keyof typeof EMPTY) => (e: { target: { value: string } }) => { setV((s) => ({ ...s, [k]: e.target.value })); setErrors((x) => ({ ...x, [k]: "" })); };
 
-  useEffect(() => { if (!open) { setV(EMPTY); setErrors({}); setExisting(null); } }, [open]);
+  useEffect(() => { if (!open) { setV(EMPTY); setErrors({}); setExisting(null); setKam(""); } }, [open]);
 
   async function save() {
     const e: Record<string, string> = {};
@@ -35,7 +44,7 @@ export function AddClientSheet({ open, onClose, onDone }: Props) {
     setBusy(true);
     try {
       const body = Object.fromEntries(Object.entries(v).map(([k, val]) => [k, val.trim() || null]));
-      const res = await apiClient.post<{ id: string }>("/clients", body);
+      const res = await apiClient.post<{ id: string }>("/clients", { ...body, accountOwnerId: kam || null });
       toast.success("Client added");
       onClose();
       onDone(res.data.id);
@@ -55,7 +64,7 @@ export function AddClientSheet({ open, onClose, onDone }: Props) {
     if (!existing) return;
     setBusy(true);
     try {
-      const res = await apiClient.post<{ id: string }>("/clients", { companyId: existing.companyId });
+      const res = await apiClient.post<{ id: string }>("/clients", { companyId: existing.companyId, accountOwnerId: kam || null });
       toast.success("Now a client");
       onClose();
       onDone(res.data.id);
@@ -87,6 +96,10 @@ export function AddClientSheet({ open, onClose, onDone }: Props) {
           <InputField label="Designation" value={v.designation} onChange={set("designation")} />
           <InputField label="City" value={v.city} onChange={set("city")} />
         </div>
+        {assigns && (
+          <SelectField label="Assign to KAM" placeholder="Me" value={kam} error={errors.accountOwnerId}
+            options={(people.data ?? []).filter((u) => u.role === "kam").map((u) => ({ value: u.id, label: u.fullName ?? u.id }))} onChange={(e) => setKam(e.target.value)} />
+        )}
         <p className="-mt-2 text-xs text-slate-500">Phone and email are both marked because at least one of them is needed.</p>
         <Button onClick={save} loading={busy} className="w-full">Add client</Button>
       </div>

@@ -238,9 +238,9 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
                   <p className="text-xs text-slate-500">Volume and base rates are calculated from the requirement packages above.</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className={TILE}><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Total target volume</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{t.units.toLocaleString("en-IN")} pcs</div><div className="text-xs text-slate-400">Sum of all packages</div></div>
-                  <div className={TILE}><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Base subtotal</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{inr(t.base)}</div><div className="text-xs text-slate-400">Excl. logistics & GST</div></div>
-                  <div className={TILE}><div className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Effective avg rate</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{inr(Math.round(t.avg))} / unit</div><div className="text-xs text-slate-400">Weighted avg</div></div>
+                  <div className={TILE}><div className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">Total target volume</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{t.units.toLocaleString("en-IN")} pcs</div><div className="text-xs text-slate-400">Sum of all packages</div></div>
+                  <div className={TILE}><div className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">Base subtotal</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{inr(t.base)}</div><div className="text-xs text-slate-400">Excl. logistics & GST</div></div>
+                  <div className={TILE}><div className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">Effective avg rate</div><div className="mt-1 font-mono text-lg font-bold text-slate-900">{inr(Math.round(t.avg))} / unit</div><div className="text-xs text-slate-400">Weighted avg</div></div>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <InputField label="Transportation (₹)" type="number" placeholder="0" value={transport} onChange={(e) => setTransport(e.target.value)} />

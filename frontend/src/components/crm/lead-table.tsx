@@ -1,7 +1,8 @@
 "use client";
-import { Bell, CalendarPlus, Check, ChevronDown, ExternalLink, Flag, History, MapPin, MessageCircle, MoreHorizontal, Pencil, Phone, UserCog } from "lucide-react";
+import { CALL_TONE, CONTACT_ICON, WHATSAPP_TONE } from "@/lib/contact-styles";
+import { Bell, CalendarPlus, Check, ChevronDown, ExternalLink, Flag, History, MapPin, MessageCircle, MoreHorizontal, Pencil, Phone, Trash2, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { seesActivity } from "@/lib/roles";
+import { isManager, seesActivity } from "@/lib/roles";
 import { useAppSelector } from "@/store/hooks";
 import { useRef, useState, type MouseEvent } from "react";
 import { Avatar } from "@/components/ui/avatar";
@@ -26,6 +27,7 @@ export type Actions = {
   close: (t: LeadTarget) => void;
   reassign: (t: LeadTarget) => void;
   moveTo: (t: LeadTarget, s: StageKey) => void;
+  remove: (lead: Lead) => void;
 };
 
 export type Selection = { ids: Set<string>; toggle: (id: string) => void; setMany: (ids: string[], on: boolean) => void };
@@ -102,14 +104,14 @@ export function LeadTable({ leads, canReassign, actions, onEdit, selection }: Pr
                   )}
                 </TableCell>
                 <TableCell className="pr-4" onClick={(e) => e.stopPropagation()}>
-                  <div className="-ml-2 flex items-center gap-0.5">
+                  <div className="-ml-2 flex items-center gap-1.5">
                     <Tooltip label={!l.contact.phone ? "No phone number" : closed ? "Lead is closed" : "Call"}>
-                      <button type="button" aria-label={`Call ${l.contact.name}`} disabled={!l.contact.phone || closed} onClick={stop(() => actions.call(t))} className={iconButton}>
+                      <button type="button" aria-label={`Call ${l.contact.name}`} disabled={!l.contact.phone || closed} onClick={stop(() => actions.call(t))} className={cn(CONTACT_ICON, CALL_TONE)}>
                         <Phone className="h-4 w-4" />
                       </button>
                     </Tooltip>
                     <Tooltip label={l.contact.phone ? "Send WhatsApp" : "No phone number"}>
-                      <button type="button" aria-label={`WhatsApp ${l.contact.name}`} disabled={!l.contact.phone} onClick={stop(() => actions.whatsapp(t))} className={iconButton}>
+                      <button type="button" aria-label={`WhatsApp ${l.contact.name}`} disabled={!l.contact.phone} onClick={stop(() => actions.whatsapp(t))} className={cn(CONTACT_ICON, WHATSAPP_TONE)}>
                         <MessageCircle className="h-4 w-4" />
                       </button>
                     </Tooltip>
@@ -136,7 +138,9 @@ export function RowMenu({ lead, target, closed, canReassign, actions }: { lead: 
   const [open, setOpen] = useState(false);
   const item = "pressable flex w-full items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100";
   const run = (fn: () => void) => () => { setOpen(false); fn(); };
-  const canSeeActivity = seesActivity(useAppSelector((st) => st.auth.session?.profile.role)); // executives and KAMs never see Activity
+  const me = useAppSelector((st) => st.auth.session?.profile);
+  const canSeeActivity = seesActivity(me?.role); // KAMs never see Activity
+  const canDelete = !!me && (isManager(me.role) || (me.role === "kam" && lead.ownerId === me.id));
   return (
     <>
       <Tooltip label="More actions">
@@ -152,6 +156,7 @@ export function RowMenu({ lead, target, closed, canReassign, actions }: { lead: 
           {canSeeActivity && <button role="menuitem" type="button" className={item} onClick={run(() => router.push(`/activity?lead=${lead.id}`))}><History className="h-4 w-4 text-slate-400" /> View activity</button>}
           {canReassign && <button role="menuitem" type="button" className={item} onClick={run(() => actions.reassign(target))}><UserCog className="h-4 w-4 text-slate-400" /> Reassign</button>}
           {!closed && <button role="menuitem" type="button" className={cn(item, "text-red-600")} onClick={run(() => actions.close(target))}><Flag className="h-4 w-4" /> Close lead</button>}
+          {canDelete && <button role="menuitem" type="button" className={cn(item, "text-red-600")} onClick={run(() => actions.remove(lead))}><Trash2 className="h-4 w-4" /> Delete</button>}
         </div>
       </Popover>
     </>
@@ -188,7 +193,7 @@ export function StageCell({ lead, target, closed, actions }: { lead: Lead; targe
       </button>
       <Popover anchor={anchor} open={open} onClose={() => setOpen(false)} width={232} label="Change stage">
         <div role="menu" className="-m-1.5 space-y-0.5">
-          <p className="px-3 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-400">Change stage</p>
+          <p className="px-3 pb-1 pt-1.5 text-[12px] font-semibold uppercase tracking-wide text-slate-400">Change stage</p>
           {steps.map((s) => (
             <button key={s} role="menuitemradio" aria-checked={s === lead.stage} type="button" onClick={() => pick(s)} className={cn("pressable flex w-full items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm hover:bg-slate-100", s === lead.stage ? "font-semibold text-brand" : "text-slate-700")}>
               <StageIcon stage={s} className={cn("h-4 w-4 shrink-0", s === lead.stage ? "text-brand" : "text-slate-400")} />

@@ -94,7 +94,7 @@ function WhatsAppTab() {
         {u && (
           <>
             <p className={cn("text-sm", u.apiEnabled ? "text-emerald-700" : "text-amber-700")}>
-              {u.apiEnabled ? "WhatsApp Business API is connected." : "API not connected yet. Executives use click-to-chat."}
+              {u.apiEnabled ? "WhatsApp Business API is connected." : "API not connected yet. KAMs use click-to-chat."}
             </p>
             <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
               <div><div className="text-xs text-slate-400">Conversations</div><div className="text-lg font-semibold">{u.conversations}</div></div>

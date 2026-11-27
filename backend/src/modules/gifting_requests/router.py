@@ -3,7 +3,8 @@ from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, File, Query, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import Field
 
 from src.core.schema import CamelModel
@@ -39,7 +40,7 @@ def search(
     status: Status | None = None,
     search: Annotated[str | None, Query(max_length=100)] = None,
     page: Annotated[int, Query(ge=1)] = 1,
-    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     # Not passed through core.schema.ok(): Gifting OS already answers in camelCase, and its data must stay as it is.
     return {"data": service.search(user, company_id=company_id, status=status, search=search, page=page, limit=limit), "message": "OK"}
@@ -88,6 +89,15 @@ class NewRequest(CamelModel):
     relationship: str = Field(min_length=1, max_length=60)
     delivery_address: str | None = Field(default=None, max_length=600)
     special_instructions: str | None = Field(default=None, max_length=500)
+    title: str | None = Field(default=None, max_length=180)
+    purpose: str | None = Field(default=None, max_length=2000)
+    relationship_context: str | None = Field(default=None, max_length=200)
+    interests: list[Annotated[str, Field(max_length=40)]] = Field(default_factory=list, max_length=12)
+    gift_style: Literal["PREMIUM", "THOUGHTFUL", "PERSONALISED"] | None = None
+    gift_purpose: str | None = Field(default=None, max_length=60)
+    message: str | None = Field(default=None, max_length=300)
+    budget_min: float | None = Field(default=None, gt=0, le=10_000_000)
+    budget_max: float | None = Field(default=None, gt=0, le=10_000_000)
 
 
 @planning_router.get("/accounts")
@@ -114,9 +124,10 @@ def new_event(body: NewEvent, user: CurrentUserDep):
 
 @planning_router.post("/requests", status_code=201)
 def new_request(body: NewRequest, user: CurrentUserDep):
-    request = body.model_dump(mode="json", by_alias=True, exclude={"company_id", "budget"}, exclude_none=True)
-    if body.budget_mode == "SPECIFIC" and body.budget:
-        request["budgetMin"] = request["budgetMax"] = round(body.budget, 2)
+    request = body.model_dump(mode="json", by_alias=True, exclude={"company_id", "budget", "budget_min", "budget_max"}, exclude_none=True)
+    low, high = body.budget_min or body.budget, body.budget_max or body.budget
+    if body.budget_mode == "SPECIFIC" and low and high:  # an amount or a range
+        request.update(budgetMin=round(low, 2), budgetMax=round(high, 2), requestedBudget=round(high, 2))
     return {"data": service.create_request(user, body.company_id, request), "message": "Gift request sent."}
 
 
@@ -129,6 +140,51 @@ class Invite(CamelModel):
     email: str = Field(max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
     full_name: str | None = Field(default=None, max_length=150)
     client_role: Literal["OWNER", "EA", "HR"] = "OWNER"
+
+
+class Details(CamelModel):
+    """Only what is sent changes; an empty value clears it."""
+    legal_name: str | None = Field(default=None, max_length=200)
+    gstin: str | None = Field(default=None, max_length=15, pattern=r"^([A-Za-z0-9]{15})?$")
+    email_domain: str | None = Field(default=None, max_length=253)
+
+
+class Active(CamelModel):
+    active: bool
+
+
+class Login(CamelModel):
+    full_name: str | None = Field(default=None, max_length=150)
+    client_role: Literal["OWNER", "EA", "HR"] | None = None
+    is_active: bool | None = None
+
+
+@clients_router.patch("/{company_id}")
+def client_details(company_id: UUID, body: Details, user: CurrentUserDep):
+    changes = {k: (v or "").strip() or None for k, v in body.model_dump(by_alias=True, exclude_unset=True).items()}
+    return {"data": clients.change_details(user, str(company_id), changes), "message": "Client updated."}
+
+
+@clients_router.put("/{company_id}/logo")
+async def client_logo(company_id: UUID, user: CurrentUserDep, file: UploadFile = File(...)):
+    data = await file.read(clients.LOGO_MAX_BYTES + 1)
+    return {"data": await run_in_threadpool(clients.change_logo, user, str(company_id), data), "message": "Logo saved."}
+
+
+@clients_router.delete("/{company_id}/logo")
+def remove_client_logo(company_id: UUID, user: CurrentUserDep):
+    return {"data": clients.change_logo(user, str(company_id), None), "message": "Logo removed."}
+
+
+@clients_router.post("/{company_id}/active")
+def client_active(company_id: UUID, body: Active, user: CurrentUserDep):
+    return {"data": clients.set_active(user, str(company_id), body.active), "message": "Saved."}
+
+
+@clients_router.patch("/{company_id}/users/{user_id}")
+def client_login(company_id: UUID, user_id: UUID, body: Login, user: CurrentUserDep):
+    changes = body.model_dump(by_alias=True, exclude_none=True)
+    return {"data": clients.change_login(user, str(company_id), str(user_id), changes), "message": "Login updated."}
 
 
 @clients_router.get("/{company_id}")

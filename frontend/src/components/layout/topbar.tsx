@@ -3,7 +3,9 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCrumb } from "@/lib/crumb";
+import { hasClientPicker, picksInHeader } from "@/lib/selected-client";
 import type { Profile } from "@/types/api";
+import { ClientSwitcher } from "./client-switcher";
 import { NotificationBell } from "./notification-bell";
 import { UserMenu } from "./user-menu";
 
@@ -11,8 +13,13 @@ const TITLES: [string, string][] = [
   ["/follow-ups", "Follow-ups"],
   ["/leads", "Leads"],
   ["/projects", "Projects"],
-  ["/clients", "Clients"],
+  ["/clients", "Client Management"],
   ["/people", "People"],
+  ["/os/home", "Home"],
+  ["/os/calendar", "Gift Calendar"],
+  ["/os/ideas", "Gift Ideas"],
+  ["/os/events", "Events"],
+  ["/os/activity", "Activity"],
   ["/gifting-requests", "Gift Requests"],
   ["/banners", "Banners"],
   ["/activity", "Activity"],
@@ -49,9 +56,10 @@ export function Topbar({ user }: { user: Profile }) {
           <span className="truncate font-semibold tracking-tight text-slate-900" aria-current="page">{crumb.label}</span>
         </nav>
       ) : (
-        <div className="min-w-0 truncate text-base font-semibold tracking-tight text-slate-900">{user.role === "kam" && path === "/clients" ? "My Accounts" : titleFor(path)}</div>
+        <div className="min-w-0 truncate text-base font-semibold tracking-tight text-slate-900">{titleFor(path)}</div>
       )}
       <div className="flex shrink-0 items-center gap-1.5">
+        {picksInHeader(user.role) && hasClientPicker(path) && <ClientSwitcher />}
         <NotificationBell />
         <UserMenu user={user} />
       </div>

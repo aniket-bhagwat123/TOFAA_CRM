@@ -6,12 +6,13 @@ Built from the Tofaa Sales CRM PRD (Phase 1: weeks 1-3). Stack: Next.js PWA + Fa
 
 1. **Database:** `supabase db push` (or `supabase db reset` locally). The new migration
    `20260102000000_crm_phase1.sql` replaces the old roles with: admin, sales_manager, sales_executive, finance, kam.
+   `20261127100000_sales_executive_to_kam.sql` later merges sales_executive into kam.
 2. **Supabase Auth, one-time codes:**
    - Email OTP: Authentication > Email Templates > "Magic Link" must include `{{ .Token }}` so the email carries the 6-digit code.
    - Mobile OTP: Authentication > Providers > Phone, with an SMS provider (MSG91, Twilio ...).
 3. **Backend:** copy `backend/.env.example` to `backend/.env`, fill the Supabase keys.
 4. **First admin:** `cd backend && python -m src.scripts.create_admin "Your Name" --email you@company.com`
-5. `start.bat`, open http://localhost:3000, sign in with a code. Add executives and managers in Settings > Users.
+5. `start.bat`, open http://localhost:3000, sign in with a code. Add KAMs and managers in Settings > Users.
 
 ## What is in Phase 1
 
@@ -33,7 +34,7 @@ Built from the Tofaa Sales CRM PRD (Phase 1: weeks 1-3). Stack: Next.js PWA + Fa
 
 - **Auto-advance to Connected** happens on call outcomes Connected and Call back later (a person answered) and on a WhatsApp reply.
   No answer / Wrong number / Not interested do not advance the stage.
-- **Closed Won** cannot be set by executives or managers (PRD 8.4: only ERP or Finance). Phase 1 lets Admin set it manually.
+- **Closed Won** cannot be set by KAMs or managers (PRD 8.4: only ERP or Finance). Phase 1 lets Admin set it manually.
 - **Stage inputs without Phase 2 features:** Requirement Received asks for occasion, quantity, budget and delivery date
   (MOM upload is Phase 2). Quotation Sent asks for the quotation total typed in (generator is Phase 2).
 - **Reminders** are in-app (toast, plus a browser notification when the tab is in the background), generated when the app polls

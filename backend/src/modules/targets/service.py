@@ -1,4 +1,4 @@
-"""Monthly targets, discount limits, and the progress card an executive sees on the Today screen."""
+"""Monthly targets, discount limits, and the progress card a KAM sees on the Today screen."""
 import math
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -11,7 +11,7 @@ from src.core.money import to_money
 from src.core.parallel import par
 from src.core.supabase import get_service_client
 from src.core.soft_delete import live
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import KAM_VALUES, Profile, Role
 from src.modules.leads.stages import CLOSED
 from src.modules.leads.value import decimal_value
 from src.modules.targets.schemas import TargetSet
@@ -146,7 +146,7 @@ def _may_manage(actor: Profile) -> list[str] | None:
     if actor.role == Role.ADMIN:
         return None
     if actor.role == Role.SALES_MANAGER:
-        return None  # managers set targets for every executive, like admins
+        return None  # managers set targets for every KAM, like admins
     raise ForbiddenError("Only managers and admins set targets.")
 
 
@@ -154,7 +154,7 @@ def list_settings(actor: Profile, month_text: str | None) -> dict:
     month = parse_month(month_text)
     scope = _may_manage(actor)
     db = get_service_client()
-    q = db.table("profiles").select("id,full_name,role,avatar_path").eq("is_active", True).eq("role", Role.SALES_EXECUTIVE.value)
+    q = db.table("profiles").select("id,full_name,role,avatar_path").eq("is_active", True).in_("role", list(KAM_VALUES))
     if scope is not None:
         q = q.in_("id", scope)
     people = q.order("full_name").execute().data
@@ -195,8 +195,8 @@ def set_settings(actor: Profile, body: TargetSet) -> dict:
     person = db.table("profiles").select("id,role").eq("id", body.user_id).limit(1).execute().data
     if not person:
         raise NotFoundError("User not found.")
-    if person[0]["role"] != Role.SALES_EXECUTIVE.value:
-        raise AppError("Targets are set for sales executives.", status_code=422)
+    if person[0]["role"] not in KAM_VALUES:
+        raise AppError("Targets are set for KAMs.", status_code=422)
     month = parse_month(body.month)
     row = {
         "user_id": body.user_id, "month": month.isoformat(), "target_amount": float(to_money(body.target_amount)),

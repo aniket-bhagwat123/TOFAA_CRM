@@ -190,6 +190,8 @@ def create_event(user: Profile, company_id: str, recipient_id: str, event: dict)
 
 
 def create_request(user: Profile, company_id: str, request: dict) -> dict:
+    if user.role == Role.KAM:
+        raise ForbiddenError("A Key Account Manager cannot create gift requests. Ask a sales manager or an admin.")
     return _call("/gift-requests", {**_writer(user, company_id), "request": request}, PLANNING)
 
 

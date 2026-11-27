@@ -20,7 +20,7 @@ type Props = {
   onOpen: (p: Person) => void;
   onEdit: (p: Person) => void;
   onArchive: (p: Person) => void;
-  onDelete: (p: Person) => void;
+  onDelete?: (p: Person) => void; // left out: this person may not delete
 };
 
 type Occasion = NonNullable<Person["nextOccasion"]>;
@@ -40,7 +40,7 @@ function OccasionCell({ occasion }: { occasion: Occasion }) {
       </span>
       <span className="min-w-0 leading-tight">
         <span className="block text-sm font-semibold text-slate-900">{occasion.label}</span>
-        <span className="block text-[13px] tabular-nums text-slate-500">
+        <span className="block text-xs tabular-nums text-slate-500">
           {formatFullDate(occasion.date)}
           {occasion.daysAway <= 7 && <span className="ml-1.5 font-medium text-brand">· {daysText(occasion.daysAway)}</span>}
         </span>
@@ -91,7 +91,7 @@ export function PeopleTable({ people, showAccount, selected, onToggle, onToggleA
                   <button type="button" onClick={() => onOpen(p)} className="flex min-w-0 items-center gap-3 text-left">
                     <Avatar src={p.photoUrl} name={p.name} size="sm" />
                     <span className="min-w-0">
-                      <span className="block truncate font-semibold text-slate-900 hover:text-brand">{p.name}{p.status === "ARCHIVED" && <span className="ml-1.5 text-[11px] font-medium text-slate-400">Archived</span>}</span>
+                      <span className="block truncate font-semibold text-slate-900 hover:text-brand">{p.name}{p.status === "ARCHIVED" && <span className="ml-1.5 text-[12px] font-medium text-slate-400">Archived</span>}</span>
                       <span className="block truncate text-xs text-slate-500">
                         {[p.designation, p.groups.map((g) => g.name).join(", ")].filter(Boolean).join(" · ") || "—"}
                       </span>
@@ -99,7 +99,7 @@ export function PeopleTable({ people, showAccount, selected, onToggle, onToggleA
                   </button>
                 </TableCell>
                 {showAccount && <TableCell className="max-w-[12rem] truncate text-slate-600">{p.account?.name ?? "—"}</TableCell>}
-                <TableCell>{rel ? <span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold", rel.tone)}>{rel.label}</span> : <span className="text-slate-300">—</span>}</TableCell>
+                <TableCell>{rel ? <span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold", rel.tone)}>{rel.label}</span> : <span className="text-slate-300">—</span>}</TableCell>
                 <TableCell className="whitespace-nowrap text-xs">
                   <div className="tabular-nums text-slate-700">{mobileText(p.mobileNumber) || "—"}</div>
                   {p.email && <div className="max-w-[12rem] truncate text-slate-400">{p.email}</div>}
@@ -113,7 +113,7 @@ export function PeopleTable({ people, showAccount, selected, onToggle, onToggleA
                     <span className="h-1.5 flex-1 rounded-full bg-slate-100">
                       <span className={cn("block h-full rounded-full", pct < 50 ? "bg-amber-500" : "bg-emerald-500")} style={{ width: `${pct}%` }} />
                     </span>
-                    <span className="w-8 text-right text-[11px] tabular-nums text-slate-500">{pct}%</span>
+                    <span className="w-8 text-right text-[12px] tabular-nums text-slate-500">{pct}%</span>
                   </div>
                 </TableCell>
                 <TableCell className="pr-4">
@@ -124,7 +124,7 @@ export function PeopleTable({ people, showAccount, selected, onToggle, onToggleA
                         {p.status === "ARCHIVED" ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
                       </button>
                     </Tooltip>
-                    <Tooltip label="Delete" align="end"><button type="button" aria-label={`Delete ${p.name}`} onClick={() => onDelete(p)} className="pressable rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></Tooltip>
+                    {onDelete && <Tooltip label="Delete" align="end"><button type="button" aria-label={`Delete ${p.name}`} onClick={() => onDelete(p)} className="pressable rounded-lg p-2 text-slate-500 hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button></Tooltip>}
                   </div>
                 </TableCell>
               </TableRow>

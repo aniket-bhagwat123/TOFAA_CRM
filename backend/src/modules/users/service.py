@@ -1,12 +1,13 @@
 import logging
 
+from src.core.access import ASSIGN_ROLES
 from src.core.audit import write_audit
 from src.core.cache import invalidate_reference, reference
 from src.core.errors import AppError, ConflictError, ForbiddenError, NotFoundError
 from src.core.images import checked_upload
 from src.core.storage import AVATARS, delete_image, guard_photo_write, signed_url, signed_urls, upload_image
 from src.core.supabase import get_service_client
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import KAM_VALUES, Profile, Role
 from src.modules.auth.service import normalize_identifier
 from src.modules.users.schemas import UserCreate, UserOut, UserUpdate
 
@@ -15,8 +16,7 @@ log = logging.getLogger(__name__)
 # Which roles each role may create.
 CAN_CREATE: dict[Role, set[Role]] = {
     Role.ADMIN: set(Role),
-    Role.SALES_MANAGER: {Role.SALES_EXECUTIVE},
-    Role.SALES_EXECUTIVE: set(),
+    Role.SALES_MANAGER: {Role.KAM},
     Role.FINANCE: set(),
     Role.KAM: set(),
 }
@@ -31,7 +31,7 @@ def create_user(actor: Profile, body: UserCreate) -> UserOut:
 
     manager_id = body.manager_id
     if actor.role == Role.SALES_MANAGER:
-        manager_id = actor.id  # a manager's new executives always join their own team
+        manager_id = actor.id  # a manager's new KAMs always join their own team
 
     row = create_account(email=body.email, password=body.password, phone=body.phone, full_name=body.full_name,
                          role=body.role, manager_id=manager_id)
@@ -103,15 +103,46 @@ def assignable_users(actor: Profile) -> list[dict]:
 def _assignable_users(actor: Profile) -> list[dict]:
     """People a lead can be reassigned to."""
     q = get_service_client().table("profiles").select("id,full_name,role,manager_id").eq("is_active", True)
-    # KAMs can be given client accounts (and their projects), so they are offered too.
-    q = q.in_("role", [Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value, Role.KAM.value])
-    if actor.role not in (Role.ADMIN, Role.SALES_MANAGER):  # managers can hand a lead to anyone, like admins
+    q = q.in_("role", [*KAM_VALUES, Role.SALES_MANAGER.value])
+    if actor.role not in ASSIGN_ROLES:
         raise ForbiddenError()
     rows = q.order("full_name").execute().data
     urls = signed_urls(AVATARS, [r.get("avatar_path") for r in rows])
     for r in rows:
+        r["role"] = Role(r["role"]).value
         r["avatar_url"] = urls.get(r.pop("avatar_path", None) or "")
     return rows
+
+
+# What ties a person to business records: (table, column, words for the message).
+USER_LINKS = (
+    ("leads", "owner_id", "leads they own"), ("leads", "created_by", "leads they added"), ("companies", "account_owner_id", "client accounts"),
+    ("tasks", "owner_id", "follow-ups"), ("meetings", "owner_id", "meetings"), ("activities", "actor_id", "history entries"),
+    ("profiles", "manager_id", "team members"),
+)
+
+
+def delete_user(actor: Profile, user_id: str) -> dict:
+    """Remove an account that was never used (added by mistake). Anyone with work or history is deactivated instead,
+    so records keep saying who did them."""
+    if actor.role != Role.ADMIN:
+        raise ForbiddenError("Only an admin can delete users.")
+    if user_id == actor.id:
+        raise AppError("You cannot delete your own account.", status_code=409)
+    db = get_service_client()
+    rows = db.table("profiles").select("*").eq("id", user_id).limit(1).execute().data
+    if not rows:
+        raise NotFoundError("User not found.")
+    used = [words for table, column, words in USER_LINKS if db.table(table).select(column).eq(column, user_id).limit(1).execute().data]
+    if used:
+        raise ConflictError(f"This user can't be deleted because they have {', '.join(used)}. Deactivate them instead: they can no longer sign in.")
+    target = rows[0]
+    db.auth.admin.delete_user(user_id)
+    db.table("profiles").delete().eq("id", user_id).execute()  # already gone where the database cascades
+    delete_image(AVATARS, target.get("avatar_path"))
+    _users_changed(user_id)
+    write_audit(actor.id, "delete", "profiles", user_id, {"name": target.get("full_name"), "role": target.get("role")})
+    return {"id": user_id, "deleted": True}
 
 
 def update_user(actor: Profile, user_id: str, body: UserUpdate) -> UserOut:

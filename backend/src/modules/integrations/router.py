@@ -6,13 +6,15 @@ on the caller's server only: never in a browser, a frontend bundle or a URL.
 import hmac
 import logging
 from typing import Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Response
+from fastapi import APIRouter, Depends, Header, Query, Response
 
 from src.core.config import settings
 from src.core.errors import UnauthorizedError
 from src.core.schema import ok
 from src.modules.banners import service as banners
+from src.modules.integrations import client_sync
 
 log = logging.getLogger(__name__)
 MIN_KEY_LENGTH = 32
@@ -36,8 +38,15 @@ def require_gifting_os_key(x_api_key: Annotated[str | None, Header(alias="X-API-
 router = APIRouter(prefix="/integrations", tags=["integrations"], dependencies=[Depends(require_gifting_os_key)])
 
 
+@router.post("/clients-changed")
+def clients_changed():
+    """Gifting OS added, renamed or switched a client: bring the accounts into step now."""
+    client_sync.worker.poke()
+    return ok(None, "Noted.")
+
+
 @router.get("/banners")
-def shared_banners(response: Response):
-    """Live Dashboard banners with audience ALL, for the TOFAA Gifting OS dashboard."""
+def shared_banners(response: Response, tenant_id: Annotated[UUID | None, Query(alias="tenantId")] = None):
+    """Live banners for one Gifting OS client's dashboard (without a client, only those for every client)."""
     response.headers["Cache-Control"] = "no-store"  # the picture links are signed: keep them out of shared caches
-    return ok(banners.shared_live())
+    return ok(banners.shared_live(str(tenant_id) if tenant_id else None))

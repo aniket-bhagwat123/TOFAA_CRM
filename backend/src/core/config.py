@@ -25,15 +25,15 @@ class Settings(BaseSettings):
     SUPABASE_JWT_AUDIENCE: str = "authenticated"
 
     # A user holds one active session. It counts as abandoned after this much inactivity.
-    # Off by default: executives use phone and desktop. Idle logout is enforced by the client.
+    # Off by default: KAMs use phone and desktop. Idle logout is enforced by the client.
     SINGLE_SESSION: bool = False
     SESSION_IDLE_MINUTES: int = 30
 
-    # Self sign-up (POST /auth/signup). Admin can never be chosen; roles above Sales Executive always need approval.
+    # Self sign-up (POST /auth/signup). Admin can never be chosen; every self sign-up needs approval.
     SIGNUP_ENABLED: bool = True
     SIGNUP_REQUIRES_APPROVAL: bool = True  # new accounts stay inactive until an admin activates them in Users
     SIGNUP_ALLOWED_DOMAINS: str = ""  # comma separated, e.g. "tofaa.in,tofaa.com"; empty = any email domain
-    SIGNUP_ALLOWED_ROLES: str = "sales_executive,sales_manager,finance,kam"  # roles a person may pick (admin is never allowed)
+    SIGNUP_ALLOWED_ROLES: str = "kam,sales_manager,finance"  # roles a person may pick (admin is never allowed)
 
     # WhatsApp Business Cloud API (Meta). Empty token = click-to-chat fallback only.
     WHATSAPP_TOKEN: str = ""
@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     GIFTING_OS_API_URL: str = ""
     # Email of the KAM who owns client accounts created for new Gifting OS clients (empty = no owner: admins only).
     GIFTING_OS_ACCOUNT_OWNER: str = ""
+    # Two-way client sync with Gifting OS: every this many seconds, and right after a client change. 0 = off.
+    GIFTING_CLIENT_SYNC_SECONDS: int = 0
     # Pilot: emails (comma separated) of the only CRM users who may change gifting data. Empty = every KAM and admin.
     # Everyone allowed to see it still can.
     GIFTING_PILOT_EMAILS: str = ""

@@ -1,4 +1,4 @@
-"""Bulk lead reassignment: managers only, fair shares, everything checked before any write. No real database."""
+"""Bulk lead reassignment: managers and KAMs (own leads) only, fair shares, everything checked before any write. No real database."""
 import pytest
 
 from src.core.errors import AppError, ForbiddenError
@@ -41,7 +41,7 @@ class Db:
         return Query()
 
 
-def person(pid, role="sales_executive", active=True):
+def person(pid, role="kam", active=True):
     return {"id": pid, "full_name": pid.upper(), "role": role, "is_active": active}
 
 
@@ -80,7 +80,7 @@ def test_unchanged_and_missing_leads_are_counted_not_written(setup):
     assert db.writes == []
 
 
-@pytest.mark.parametrize("bad", [person("b", role="kam"), person("b", active=False), None])
+@pytest.mark.parametrize("bad", [person("b", role="finance"), person("b", active=False), None])
 def test_one_unsuitable_person_stops_everything(setup, bad):
     db = setup([person("a")] + ([bad] if bad else []), [{"id": "1", "owner_id": "x"}])
     with pytest.raises(AppError):
@@ -88,8 +88,24 @@ def test_one_unsuitable_person_stops_everything(setup, bad):
     assert db.writes == []
 
 
-def test_only_managers(setup):
+KAM = Profile.model_construct(id="e", role=Role.KAM)
+
+
+@pytest.mark.parametrize("role", [Role.FINANCE])
+def test_other_roles_cannot_reassign(setup, role):
     db = setup([person("a")], [])
     with pytest.raises(ForbiddenError):
-        run(["1"], ["a"], Profile.model_construct(id="e", role=Role.SALES_EXECUTIVE))
+        run(["1"], ["a"], Profile.model_construct(id="k", role=role))
+    assert db.writes == []
+
+
+def test_a_kam_assigns_their_own_leads(setup):
+    setup([person("a")], [{"id": "1", "owner_id": "e"}])
+    assert run(["1"], ["a"], KAM)["reassigned"] == 1
+
+
+def test_a_kam_cannot_move_someone_elses_lead(setup):
+    db = setup([person("a")], [{"id": "1", "owner_id": "x"}])
+    with pytest.raises(ForbiddenError):
+        run(["1"], ["a"], KAM)
     assert db.writes == []

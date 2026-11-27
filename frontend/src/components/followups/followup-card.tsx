@@ -1,5 +1,6 @@
 "use client";
-import { AlarmClock, AlertTriangle, CalendarClock, ClipboardCheck, MapPin, MessageCircle, Phone, Repeat, UserRoundCheck, Video } from "lucide-react";
+import { CALL_TONE, WHATSAPP_TONE } from "@/lib/contact-styles";
+import { AlarmClock, AlertTriangle, CalendarClock, ClipboardCheck, MapPin, MessageCircle, Phone, Repeat, Trash2, UserRoundCheck, Video } from "lucide-react";
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -135,25 +136,25 @@ export function FlagChips({ f, late, escalated: isEscalated }: { f: FollowUpItem
   );
 }
 
-export type CardActions = { onOpen: () => void; onCall: () => void; onWhatsApp: () => void; onLog: () => void; onSnooze: () => void };
+export type CardActions = { onDelete: () => void; onOpen: () => void; onCall: () => void; onWhatsApp: () => void; onLog: () => void; onSnooze: () => void };
 
 /** Call, WhatsApp and Log outcome, in one row. Used by the board card and the list. */
 export function ActionRow({ f, onCall, onWhatsApp, onLog, compact, snooze }: Pick<CardActions, "onCall" | "onWhatsApp" | "onLog"> & { f: FollowUpItem; compact?: boolean; snooze?: ReactNode }) {
   return (
     <div className="flex items-center gap-1.5">
       <Tooltip label={f.phone ? `Call ${f.phone}` : "No phone number"} className={compact ? "shrink-0" : "min-w-fit flex-1"}>
-        <Button onClick={onCall} disabled={!f.phone} className="h-9 min-h-0 w-full gap-1.5 whitespace-nowrap px-2.5 text-[13px]">
+        <Button onClick={onCall} disabled={!f.phone} className={cn("min-h-0 w-full gap-1.5 whitespace-nowrap px-2.5 text-xs", compact ? "h-8" : "h-9", CALL_TONE)}>
           <Phone className="h-4 w-4 shrink-0" />Call
         </Button>
       </Tooltip>
       <Tooltip label={f.phone ? "WhatsApp" : "No phone number"} className="shrink-0">
-        <button type="button" aria-label="WhatsApp" disabled={!f.phone} onClick={onWhatsApp} className="pressable flex h-9 w-9 items-center justify-center rounded-full bg-green-50 text-green-700 hover:bg-green-100 disabled:opacity-35">
+        <button type="button" aria-label="WhatsApp" disabled={!f.phone} onClick={onWhatsApp} className={cn("pressable flex items-center justify-center rounded-full disabled:opacity-35", WHATSAPP_TONE, compact ? "h-8 w-8" : "h-9 w-9")}>
           <MessageCircle className="h-4 w-4" />
         </button>
       </Tooltip>
       {snooze}
       <Tooltip label="Log what happened" className={compact ? "shrink-0" : "min-w-fit flex-[1.4]"}>
-        <Button variant="secondary" onClick={onLog} className="h-9 min-h-0 w-full gap-1.5 whitespace-nowrap px-2.5 text-[13px]">
+        <Button variant="secondary" onClick={onLog} className={cn("min-h-0 w-full gap-1.5 whitespace-nowrap px-2.5 text-xs", compact ? "h-8" : "h-9")}>
           <ClipboardCheck className="h-4 w-4 shrink-0" />Outcome
         </Button>
       </Tooltip>
@@ -182,6 +183,18 @@ export function SnoozeButton({ f, onSnooze, side = "bottom", className, open }: 
   );
 }
 
+/** Delete a follow-up added by mistake. Not offered for meetings (the meeting is cancelled on the lead). */
+export function DeleteButton({ f, onDelete, className }: { f: FollowUpItem; onDelete: () => void; className?: string }) {
+  if (f.meeting) return null;
+  return (
+    <Tooltip label="Delete follow-up" side="top" align="end" className={cn("shrink-0", className)}>
+      <button type="button" aria-label="Delete follow-up" onClick={onDelete} className="pressable flex h-8 w-8 items-center justify-center rounded-full text-slate-400 hover:bg-red-50 hover:text-red-600">
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </Tooltip>
+  );
+}
+
 type CardProps = CardActions & {
   f: FollowUpItem;
   when: string;
@@ -193,7 +206,7 @@ type CardProps = CardActions & {
   onDragStart?: () => void;
 };
 
-export function FollowUpCard({ f, when, late, escalated, snoozeOpen, showOwner, onDragStart, onOpen, onCall, onWhatsApp, onLog, onSnooze }: CardProps) {
+export function FollowUpCard({ f, when, late, escalated, snoozeOpen, showOwner, onDragStart, onOpen, onCall, onWhatsApp, onLog, onSnooze, onDelete }: CardProps) {
   const MeetingIcon = f.meeting?.kind === "online" ? Video : MapPin;
   const kind = kindOf(f);
   const showTitle = f.title && f.title !== "Meeting" && f.title !== KIND_LABEL[kind] && !/client requested/i.test(f.title);
@@ -212,7 +225,8 @@ export function FollowUpCard({ f, when, late, escalated, snoozeOpen, showOwner, 
         {showOwner && f.ownerName && (
           <Tooltip label={f.ownerName} side="bottom" align="end" className="shrink-0"><Avatar src={f.ownerAvatarUrl} name={f.ownerName} size="xs" /></Tooltip>
         )}
-        <SnoozeButton f={f} onSnooze={onSnooze} open={snoozeOpen} className="-mr-1 -mt-0.5" />
+        <SnoozeButton f={f} onSnooze={onSnooze} open={snoozeOpen} className="-mt-0.5" />
+        <DeleteButton f={f} onDelete={onDelete} className="-mr-1 -mt-0.5" />
       </div>
 
       <FlagChips f={f} late={late} escalated={escalated} />

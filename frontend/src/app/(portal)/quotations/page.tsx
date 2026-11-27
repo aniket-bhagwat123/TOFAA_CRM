@@ -1,14 +1,15 @@
 "use client";
-import { Download, ExternalLink } from "lucide-react";
+import { Download, ExternalLink, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { QUOTE_STATUS } from "@/components/lead/deal-cards";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useDelete } from "@/components/ui/use-delete";
 import { openPdf } from "@/features/media/download";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -19,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import type { Paged } from "@/types/api";
 import type { AssignableUser, QuotationStatus } from "@/types/crm";
+import { PAGE_SIZE, Pagination } from "@/components/ui/pagination";
 
 type Row = {
   id: string; leadId: string; number: string; version: number; status: QuotationStatus; total: number; discountPct?: number;
@@ -36,10 +38,12 @@ export default function QuotationsPage() {
   const [status, setStatus] = useState("");
   const [owner, setOwner] = useState("");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const q = useDebounce(search, 300);
-  const list = useApi<Paged<Row>>("/quotations", { search: q || undefined, status: status || undefined, ownerId: owner || undefined, page, limit: 25 });
+  const list = useApi<Paged<Row>>("/quotations", { search: q || undefined, status: status || undefined, ownerId: owner || undefined, page, limit: pageSize });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const reset = (fn: () => void) => { fn(); setPage(1); };
+  const remove = useDelete(() => void list.reload());
   const leadHref = (r: Row) => (r.lead.pipeline === "client" ? `/projects/${r.leadId}` : `/leads/${r.leadId}`);
 
   return (
@@ -62,7 +66,7 @@ export default function QuotationsPage() {
         ))}
       </div>
 
-      {list.loading && !list.data && <div className="flex justify-center py-12"><Spinner /></div>}
+      {list.loading && !list.data && <TableSkeleton columns={6} rows={8} />}
       {list.error && !list.data && <StateView kind="error" message={list.error} onRetry={() => void list.reload()} />}
       {list.data && list.data.items.length === 0 && <StateView kind="empty" title="No quotations" message={q || status || owner ? "Try a different search or filter." : "Quotations made on leads show up here."} />}
       {list.data && list.data.items.length > 0 && (
@@ -101,6 +105,12 @@ export default function QuotationsPage() {
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs" onClick={() => void openPdf(`/quotations/${r.id}/pdf`)}><Download className="h-3.5 w-3.5" /> PDF</Button>
                       <Link href={leadHref(r)} className="inline-flex min-h-8 items-center gap-1 rounded-lg px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-100"><ExternalLink className="h-3.5 w-3.5" /> Open</Link>
+                      {r.status !== "sent" && !r.sentAt && (
+                        <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs text-red-600" aria-label={`Delete ${r.number}`}
+                          onClick={() => remove.ask({ path: `/quotations/${r.id}`, title: `Delete ${r.number}?`, done: "Quotation deleted", message: "This quotation was never sent. It is removed for good." })}>
+                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -109,13 +119,10 @@ export default function QuotationsPage() {
           </Table>
         </div>
       )}
-      {list.data && list.data.meta.pages > 1 && (
-        <div className="flex items-center justify-between gap-3 text-sm text-slate-500">
-          <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-          <span>Page {page} of {list.data.meta.pages} · {list.data.meta.total} quotations</span>
-          <Button variant="secondary" disabled={page >= list.data.meta.pages} onClick={() => setPage(page + 1)}>Next</Button>
-        </div>
+      {list.data && list.data.meta.total > 0 && (
+        <Pagination page={page} pageSize={pageSize} total={list.data.meta.total} noun={["quotation", "quotations"]} loading={list.loading} onPage={setPage} onPageSize={(n) => { setPageSize(n); setPage(1); }} />
       )}
+      {remove.dialog}
     </div>
   );
 }

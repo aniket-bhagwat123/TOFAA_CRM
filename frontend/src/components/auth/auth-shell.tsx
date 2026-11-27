@@ -45,7 +45,7 @@ export function AuthShell({ title, subtitle, children, footer }: Props) {
                 <br />
                 work happens.
               </p>
-              <p className="mt-3 hidden max-w-md text-[15px] leading-relaxed text-white/85 sm:block lg:mt-4 lg:text-[clamp(15px,1.15vw,18px)]">
+              <p className="mt-3 hidden max-w-md text-sm leading-relaxed text-white/85 sm:block lg:mt-4 lg:text-[clamp(15px,1.15vw,18px)]">
                 Call, WhatsApp, meet, and follow up — from one card. The CRM keeps the pipeline up to date for you.
               </p>
             </div>
@@ -61,7 +61,7 @@ export function AuthShell({ title, subtitle, children, footer }: Props) {
         <div className="animate-rise relative w-full max-w-[30rem] lg:max-w-[min(36rem,80%)]">
           <div className="hidden lg:block"><Logo /></div>
           <h1 className="text-[clamp(1.9rem,7vw,2.4rem)] font-extrabold tracking-tight text-[#0A2540] lg:mt-[clamp(2rem,7vh,4.5rem)] lg:text-[clamp(2.4rem,3.4vw,3.4rem)]">{title}</h1>
-          {subtitle && <p className="mt-2 max-w-md text-[15px] leading-relaxed text-slate-600 lg:mt-3 lg:text-[clamp(15px,1.2vw,18px)]">{subtitle}</p>}
+          {subtitle && <p className="mt-2 max-w-md text-sm leading-relaxed text-slate-600 lg:mt-3 lg:text-[clamp(15px,1.2vw,18px)]">{subtitle}</p>}
           <div className="mt-6 lg:mt-[clamp(1.75rem,4vh,2.5rem)]">{children}</div>
           {footer && <div className="mt-6 text-sm text-slate-500">{footer}</div>}
         </div>

@@ -47,7 +47,7 @@ function ItemShell({ href, title, sub, stage, highlight, right }: { href: string
 }
 
 /**
- * "Today" at the top of a sales executive's Dashboard (it used to be its own page): calls and follow-ups due today,
+ * "Today" at the top of a KAM's Dashboard (it used to be its own page): calls and follow-ups due today,
  * overdue ones, today's meetings, leads with no next action, and the end-of-day check. The monthly target is not
  * repeated here: the Dashboard already shows it.
  */

@@ -26,7 +26,7 @@ def list_users(actor: CurrentUserDep):
     return ok(service.list_users(actor))
 
 
-@router.get("/assignable", dependencies=[managers])
+@router.get("/assignable")  # the service decides who may assign
 def assignable(actor: CurrentUserDep):
     return ok(service.assignable_users(actor))
 
@@ -41,6 +41,11 @@ def create_user(body: UserCreate, actor: CurrentUserDep):
 def update_user(user_id: str, body: UserUpdate, actor: CurrentUserDep):
     user = service.update_user(actor, user_id, body)
     return ok(user.model_dump(by_alias=True, mode="json"), "User updated.")
+
+
+@router.delete("/{user_id}", dependencies=[Depends(require_roles(Role.ADMIN))])
+def delete_user(user_id: str, actor: CurrentUserDep):
+    return ok(service.delete_user(actor, user_id), "User deleted.")
 
 
 # Profile photo. "me" is the signed-in user; admins (and a manager for their team) can set others.

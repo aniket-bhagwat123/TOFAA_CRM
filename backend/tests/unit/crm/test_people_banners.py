@@ -41,20 +41,41 @@ def test_banner_audience():
     assert banners.audience_allows("ADMIN", Role.ADMIN) and not banners.audience_allows("ADMIN", Role.KAM)
 
 
-def test_banner_picture_is_any_wide_strip_at_any_size():
-    assert banners.check_picture(png(2000, 180)) == ("image/png", "png")  # the ideal 1000 x 90 shape
-    assert banners.check_picture(png(2167, 284))  # about 7.6 : 1
-    assert banners.check_picture(png(400, 36))  # small is fine: only the shape counts
-    assert banners.check_picture(png(400, 100))  # exactly 4 : 1
-    assert banners.check_picture(png(1200, 100))  # exactly 12 : 1
-    with pytest.raises(AppError, match="wide strip"):
-        banners.check_picture(png(1000, 300))  # 3.3 : 1, too tall
-    with pytest.raises(AppError, match="wide strip"):
-        banners.check_picture(png(1300, 100))  # 13 : 1, too thin
+def test_banner_picture_is_exactly_the_cropped_size():
+    assert banners.check_picture(png(2156, 198)) == ("image/png", "png")
+    for wrong in ((2156, 199), (1078, 99), (1000, 90)):
+        with pytest.raises(AppError, match="must be 2156 x 198"):
+            banners.check_picture(png(*wrong))
     with pytest.raises(AppError, match="PNG, JPEG or WebP"):
         banners.check_picture(b"GIF89a....")
     with pytest.raises(AppError, match="Choose a banner"):
         banners.check_picture(b"")
+
+
+def test_banner_is_shown_to_all_or_only_to_chosen_clients():
+    assert banners.shown_to({"company_ids": []}, {"c-1"}) and banners.shown_to({}, set())
+    assert banners.shown_to({"company_ids": ["c-1", "c-2"]}, {"c-2"})
+    assert not banners.shown_to({"company_ids": ["c-1"]}, {"c-2"})
+    assert not banners.shown_to({"company_ids": ["c-1"]}, set())  # no client chosen: only the banners for everyone
+    assert banners.shown_to({"company_ids": ["c-1"]}, None)  # an admin looking at all clients
+
+
+def test_a_kam_manages_only_banners_for_their_own_clients(monkeypatch):
+    monkeypatch.setattr(banners, "company_scope", lambda user: ["c-1", "c-2"])
+    monkeypatch.setattr(banners, "_client_names", lambda ids: {i: i for i in ids})
+    own = banners.own_clients(KAM)
+    assert banners.can_manage({"company_ids": ["c-1"]}, own)
+    assert not banners.can_manage({"company_ids": ["c-1", "c-9"]}, own)
+    assert not banners.can_manage({"company_ids": []}, own)  # for every client: an admin's
+    assert banners.targets(KAM, ["c-2", "c-2"]) == ["c-2"]
+    with pytest.raises(AppError, match="at least one"):
+        banners.targets(KAM, [])
+    with pytest.raises(ForbiddenError):
+        banners.targets(KAM, ["c-9"])
+    assert banners.targets(ADMIN, []) == []
+    monkeypatch.setattr(banners, "_select", lambda narrow: [{"id": "b", "company_ids": ["c-9"]}])
+    with pytest.raises(NotFoundError):
+        banners.delete(KAM, "b")
 
 
 def test_banners_are_only_for_kam_and_admin():

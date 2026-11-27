@@ -57,9 +57,9 @@ export function StageProgress({ stage, pipeline, lostFrom, lostReason, onPick, o
   return (
     <section className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="min-w-0 text-[13px] font-medium text-slate-500">{heading}</h2>
+        <h2 className="min-w-0 text-xs font-medium text-slate-500">{heading}</h2>
         {!won && (
-          <button type="button" className="pressable inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] font-medium text-brand hover:bg-brand-soft" onClick={() => setPicking(true)}>
+          <button type="button" className="pressable inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium text-brand hover:bg-brand-soft" onClick={() => setPicking(true)}>
             {lost ? <><RotateCcw className="h-3.5 w-3.5" /> Reopen lead</> : <><ArrowLeftRight className="h-3.5 w-3.5" /> Change stage</>}
           </button>
         )}
@@ -96,7 +96,7 @@ export function StageProgress({ stage, pipeline, lostFrom, lostReason, onPick, o
                       : isClose ? "Close lead (won or lost)" : here ? "Current stage" : `Move to ${STAGE_LABEL[s]}`
                   }
                   className={cn(
-                    "pressable flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold transition-colors disabled:cursor-default",
+                    "pressable flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[12px] font-semibold transition-colors disabled:cursor-default",
                     won && "bg-emerald-500 text-white",
                     isClose && lost && "bg-red-500 text-white",
                     stopHere && "bg-red-500 text-white ring-[3px] ring-red-500/20",
@@ -108,7 +108,7 @@ export function StageProgress({ stage, pipeline, lostFrom, lostReason, onPick, o
                 >
                   {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : stopHere ? <X className="h-3.5 w-3.5" strokeWidth={3} /> : isClose && lost ? <Flag className="h-3 w-3" /> : i + 1}
                 </button>
-                <span className={cn("line-clamp-2 max-w-full break-words text-center text-[11px] leading-tight", here ? "font-semibold text-brand" : stopHere || (isClose && lost) ? "font-semibold text-red-600" : isClose && won ? "font-semibold text-emerald-600" : "text-slate-500")}>
+                <span className={cn("line-clamp-2 max-w-full break-words text-center text-[12px] leading-tight", here ? "font-semibold text-brand" : stopHere || (isClose && lost) ? "font-semibold text-red-600" : isClose && won ? "font-semibold text-emerald-600" : "text-slate-500")}>
                   {isClose ? (won ? "Won" : lost ? "Lost" : "Close lead") : STAGE_LABEL[s]}
                 </span>
               </li>

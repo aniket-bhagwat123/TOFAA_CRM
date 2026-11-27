@@ -99,8 +99,8 @@ function WhatsAppPreview({ target, quotation, button }: { target: LeadTarget; qu
   if (!button) {
     return (
       <div className="rounded-2xl bg-[#efeae2] p-3" aria-label="WhatsApp preview">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">What the client receives</p>
-        <div className="max-w-[20rem] rounded-xl rounded-tl-sm bg-white px-3 py-2.5 text-[13px] leading-snug text-slate-800 shadow-sm">
+        <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">What the client receives</p>
+        <div className="max-w-[20rem] rounded-xl rounded-tl-sm bg-white px-3 py-2.5 text-xs leading-snug text-slate-800 shadow-sm">
           Hello {target.contactName ?? contact ?? "there"}, here is our quotation {quotation.number} for {company}. Total: {inr(quotation.total)}.
           <br />View or download: <span className="break-all text-sky-600 underline">link to the PDF</span>
         </div>
@@ -109,9 +109,9 @@ function WhatsAppPreview({ target, quotation, button }: { target: LeadTarget; qu
   }
   return (
     <div className="rounded-2xl bg-[#efeae2] p-3" aria-label="WhatsApp preview">
-      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">What the client receives</p>
+      <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-slate-500">What the client receives</p>
       <div className="max-w-[20rem] overflow-hidden rounded-xl rounded-tl-sm bg-white shadow-sm">
-        <div className="whitespace-pre-line px-3 pb-1.5 pt-2.5 text-[13px] leading-snug text-slate-800">
+        <div className="whitespace-pre-line px-3 pb-1.5 pt-2.5 text-xs leading-snug text-slate-800">
           {`Hello ${name},
 
 Thank you for your interest in Tofaa India. Your quotation ${quotation.number} for ${company} is ready.
@@ -119,7 +119,7 @@ Total: ${inr(quotation.total)}
 
 Tap the button below to view or download it.`}
         </div>
-        <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 py-2 text-[13px] font-medium text-sky-600">
+        <div className="flex items-center justify-center gap-1.5 border-t border-slate-100 py-2 text-xs font-medium text-sky-600">
           <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />View quotation
         </div>
       </div>

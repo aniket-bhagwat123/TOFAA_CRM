@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { setProfile } from "@/features/auth/auth.slice";
+import { loadPickedClient, onPickedClient, pickedClient } from "@/lib/selected-client";
 import { apiClient } from "@/services/api-client";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 import type { Profile } from "@/types/api";
@@ -35,6 +36,10 @@ export function PortalShell({ children }: { children: ReactNode }) {
     apiClient.get<Profile>("/auth/me").then((r) => dispatch(setProfile(r.data))).catch(() => undefined);
   }, [signedIn, dispatch]);
 
+  // The header's client pick, read straight from where it is kept so the screen can never disagree with it.
+  if (session) loadPickedClient(session.profile.id, session.profile.role); // before the screens ask for data
+  const clientId = useSyncExternalStore(onPickedClient, () => pickedClient()?.id ?? "", () => "");
+
   if (!ready || !session) {
     return <div className="flex h-screen items-center justify-center"><Spinner /></div>;
   }
@@ -44,7 +49,7 @@ export function PortalShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <Topbar user={session.profile} />
         {/* The phone menu is taller for roles with the CRM / OS switch */}
-        <main className={cn("min-h-0 flex-1 overflow-y-auto p-4 md:p-6 md:pb-6", navModules(session.profile.role) ? "pb-36" : "pb-24")}>{children}</main>
+        <main className={cn("min-h-0 flex-1 overflow-y-auto p-4 md:p-6 md:pb-6", navModules(session.profile.role) ? "pb-36" : "pb-24")}><Fragment key={clientId}>{children}</Fragment></main>
       </div>
       <BottomNav user={session.profile} />
       <SessionGuards />

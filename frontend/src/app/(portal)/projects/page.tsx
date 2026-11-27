@@ -12,13 +12,14 @@ import { Button } from "@/components/ui/button";
 import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { BoardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
+import { useAllPages } from "@/hooks/use-all-pages";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { STAGE_LABEL } from "@/lib/format";
 import { inrShort } from "@/lib/money";
-import { isManager } from "@/lib/roles";
+import { canAssignLeads, isManager } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import type { Paged } from "@/types/api";
@@ -65,7 +66,6 @@ export default function ProjectsPage() {
   const [owner, setOwner] = useState("");
   const [stage, setStage] = useState("");
   const [overdue, setOverdue] = useState(false);
-  const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
@@ -87,14 +87,14 @@ export default function ProjectsPage() {
     setLayout(l);
     try { localStorage.setItem(LAYOUT_KEY, l); } catch { /* ignore */ }
   };
-  const reset = (fn: () => void) => { fn(); setPage(1); };
+  const reset = (fn: () => void) => fn();
   const clearFilters = () => reset(() => { setSearch(""); setClient(""); setOccasion(""); setOrigin(""); setOwner(""); setStage(""); setOverdue(false); });
 
   const common = { pipeline: "client", search: q || undefined, companyId: client || undefined, occasion: occasion || undefined, origin: origin || undefined, ownerId: owner || undefined };
   const showBoard = status === "active" && layout === "board";
   const stageParam = status === "won" ? "closed_won" : status === "lost" ? "closed_lost" : stage || ACTIVE.join(",");
   const board = useApi<Lead[]>(showBoard ? "/leads/board" : null, { ...common, overdue: overdue || undefined });
-  const list = useApi<Paged<Lead>>(showBoard ? null : "/leads", { ...common, stage: stageParam, overdue: status === "active" && overdue ? true : undefined, page, limit: 25 });
+  const list = useAllPages<Paged<Lead>>(showBoard ? null : "/leads", { ...common, stage: stageParam, overdue: status === "active" && overdue ? true : undefined });
   const summary = useApi<Summary>("/projects/summary", { ownerId: common.ownerId, companyId: common.companyId, occasion: common.occasion, origin: common.origin, search: common.search });
   const filters = useApi<Filters>("/projects/filters");
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
@@ -126,7 +126,7 @@ export default function ProjectsPage() {
       className={cn("pressable flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium", status === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700")}
     >
       {label}
-      {count !== undefined && <span className={cn("rounded-full px-1.5 text-[11px] font-semibold", status === value ? "bg-brand-soft text-brand" : "bg-slate-200/80 text-slate-500")}>{count}</span>}
+      {count !== undefined && <span className={cn("rounded-full px-1.5 text-[12px] font-semibold", status === value ? "bg-brand-soft text-brand" : "bg-slate-200/80 text-slate-500")}>{count}</span>}
     </button>
   );
 
@@ -207,7 +207,7 @@ export default function ProjectsPage() {
       </div>
 
       {/* content */}
-      {active.loading && !active.data && <div className="flex flex-1 items-center justify-center"><Spinner /></div>}
+      {active.loading && !active.data && (showBoard ? <BoardSkeleton /> : <TableSkeleton columns={6} rows={8} />)}
       {active.error && !active.data && <StateView kind="error" message={active.error} onRetry={reload} />}
       {active.data && isEmpty && (
         <StateView
@@ -228,7 +228,7 @@ export default function ProjectsPage() {
               onDrop={() => drop(st)}
               className={cn("flex min-h-0 min-w-[16.5rem] flex-1 flex-col rounded-2xl p-2.5", COLUMN_TONE[st], over === st && "ring-2 ring-brand/40")}
             >
-              <div className="mb-2 flex items-center justify-between gap-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mb-2 flex items-center justify-between gap-1 px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
                 <span className="truncate">{STAGE_LABEL[st]}</span>
                 <span className="rounded-full bg-white px-2 py-0.5 text-slate-600">{byStage[st].length}</span>
               </div>
@@ -243,14 +243,7 @@ export default function ProjectsPage() {
 
       {!showBoard && list.data && !isEmpty && (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <ProjectTable projects={list.data.items} showOwner={manager} canReassign={manager} actions={actions} onEdit={setEditing} />
-          {list.data.meta.pages > 1 && (
-            <div className="flex items-center justify-between gap-3 pt-4 text-sm text-slate-600">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span className="truncate">Page {page} of {list.data.meta.pages} · {list.data.meta.total} projects</span>
-              <Button variant="secondary" disabled={page >= list.data.meta.pages} onClick={() => setPage(page + 1)}>Next</Button>
-            </div>
-          )}
+          <ProjectTable projects={list.data.items} showOwner={manager} canReassign={!!user && canAssignLeads(user.role)} actions={actions} onEdit={setEditing} />
         </div>
       )}
 
@@ -273,7 +266,7 @@ function Stat({ icon, tone, label, value, hint, onClick, active }: { icon: React
     <>
       <div className="flex items-center gap-2">
         <span className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-lg", tone)}>{icon}</span>
-        <span className="truncate text-[13px] font-medium text-slate-500">{label}</span>
+        <span className="truncate text-xs font-medium text-slate-500">{label}</span>
       </div>
       <div className="mt-2 truncate text-xl font-semibold tracking-tight text-slate-900 tabular-nums">{value}</div>
       {hint && <div className="mt-0.5 truncate text-xs text-slate-500">{hint}</div>}

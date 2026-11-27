@@ -1,7 +1,8 @@
 from datetime import date
-from typing import Literal
+from typing import Annotated, Literal
+from uuid import UUID
 
-from fastapi import APIRouter, File, Form, UploadFile
+from fastapi import APIRouter, File, Form, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import Field, ValidationError, model_validator
 
@@ -23,6 +24,7 @@ class BannerSettings(CamelModel):
     is_active: bool | None = None
     starts_on: date | None = None
     ends_on: date | None = None
+    company_ids: list[UUID] | None = Field(default=None, max_length=service.MAX_CLIENTS)  # empty = every client
 
     @model_validator(mode="after")
     def dates_in_order(self):
@@ -39,9 +41,9 @@ async def _read(file: UploadFile) -> bytes:
 
 
 @router.get("/banners")
-def live(user: CurrentUserDep):
-    """The banners this person sees on their Dashboard now (empty for roles without banners)."""
-    return ok(service.live(user))
+def live(user: CurrentUserDep, company_id: Annotated[UUID | None, Query(alias="companyId")] = None):
+    """The banners this person sees now, for one client or all of theirs (empty for roles without banners)."""
+    return ok(service.live(user, str(company_id) if company_id else None))
 
 
 @router.get("/admin/banners")
@@ -59,9 +61,10 @@ async def create(
     is_active: bool = Form(True, alias="isActive"),
     starts_on: date | None = Form(None, alias="startsOn"),
     ends_on: date | None = Form(None, alias="endsOn"),
+    company_ids: list[UUID] = Form([], alias="companyIds"),
 ):
     try:
-        settings = BannerSettings(audience=audience, title=(title or "").strip() or None, sort_order=sort_order, is_active=is_active, starts_on=starts_on, ends_on=ends_on)
+        settings = BannerSettings(audience=audience, title=(title or "").strip() or None, sort_order=sort_order, is_active=is_active, starts_on=starts_on, ends_on=ends_on, company_ids=company_ids)
     except ValidationError as exc:  # built by hand from form fields: turn a rule break into a clear 422
         raise AppError(exc.errors()[0]["msg"].removeprefix("Value error, "), status_code=422) from exc
     data = await _read(file)
@@ -74,7 +77,7 @@ def update(banner_id: str, body: BannerSettings, user: CurrentUserDep):
     fields = body.model_dump(exclude_unset=True, mode="json")
     if "title" in fields:
         fields["title"] = (fields["title"] or "").strip() or None
-    for k in ("audience", "sort_order", "is_active"):
+    for k in ("audience", "sort_order", "is_active", "company_ids"):
         if k in fields and fields[k] is None:
             raise AppError(f"{k.replace('_', ' ').capitalize()} cannot be empty.", status_code=422)
     return ok(service.update(user, banner_id, fields), "Banner updated.")

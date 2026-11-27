@@ -1,4 +1,5 @@
 "use client";
+import { CALL_TONE } from "@/lib/contact-styles";
 import { BellRing, Phone, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -104,7 +105,7 @@ export function ReminderCenter({ enabled }: { enabled: boolean }) {
               <BellRing className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">Reminder · due {formatTime(r.dueAt!).toUpperCase()}</p>
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-amber-700">Reminder · due {formatTime(r.dueAt!).toUpperCase()}</p>
               <p className="truncate text-sm font-semibold text-slate-900">{dealName(r)}</p>
               <p className="truncate text-xs text-slate-500">{KIND_LABEL[kindOf(r)] ?? "Follow-up"} · {r.contactName || "No contact"}{r.clientRequested ? " · Client requested" : ""}</p>
             </div>
@@ -113,8 +114,8 @@ export function ReminderCenter({ enabled }: { enabled: boolean }) {
             </button>
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <Button onClick={() => call(r)} disabled={!r.phone} className="h-9 min-h-0 flex-1 gap-1.5 whitespace-nowrap px-3 text-[13px]"><Phone className="h-4 w-4" />Call now</Button>
-            <Button variant="secondary" onClick={() => open(r)} className="h-9 min-h-0 flex-1 whitespace-nowrap px-3 text-[13px]">Open follow-ups</Button>
+            <Button onClick={() => call(r)} disabled={!r.phone} className={`h-9 min-h-0 flex-1 gap-1.5 whitespace-nowrap px-3 text-xs ${CALL_TONE}`}><Phone className="h-4 w-4" />Call now</Button>
+            <Button variant="secondary" onClick={() => open(r)} className="h-9 min-h-0 flex-1 whitespace-nowrap px-3 text-xs">Open follow-ups</Button>
           </div>
         </article>
       ))}

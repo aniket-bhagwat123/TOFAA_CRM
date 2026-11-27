@@ -55,9 +55,9 @@ export function Timeline({ items }: { items: Activity[] }) {
         <li key={a.id} className="flex gap-2.5">
           <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 [&_svg]:h-3.5 [&_svg]:w-3.5">{ICON[a.kind]}</span>
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium leading-snug text-slate-800">{activityTitle(a)}</div>
+            <div className="text-xs font-medium leading-snug text-slate-800">{activityTitle(a)}</div>
             {a.note && a.kind !== "created" && <p className="whitespace-pre-wrap break-words text-xs leading-snug text-slate-600">{a.note}</p>}
-            <div className="text-[11px] text-slate-400">{a.actor?.fullName ?? (a.meta?.direction === "in" ? "Client" : "System")} · {formatDateTime(a.createdAt)}</div>
+            <div className="text-[12px] text-slate-400">{a.actor?.fullName ?? (a.meta?.direction === "in" ? "Client" : "System")} · {formatDateTime(a.createdAt)}</div>
           </div>
         </li>
       ))}

@@ -13,7 +13,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 from src.core import cache
-from src.core.access import require_lead_role, visible_owner_ids
+from src.core.access import ASSIGN_ROLES, require_lead_role, visible_owner_ids
 from src.core.audit import write_audit
 from src.core.config import settings
 from src.core.dates import IST, next_business_day, now_ist, today_ist
@@ -22,11 +22,12 @@ from src.core.keys import company_key, email_key, phone_key
 from src.core.money import to_money
 from src.core.parallel import par
 from src.core.storage import CLIENT_IMAGES, signed_urls
+from src.modules.gifting_requests import logos
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity, add_company_activity
 from src.core.working_hours import with_time
 from src.core.soft_delete import is_deleted, live, ready, require_ready
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import KAM_VALUES, Profile, Role
 from src.modules.clients import schemas
 from src.modules.leads import service as leads
 from src.modules.leads.stages import CLOSED
@@ -252,11 +253,14 @@ def _contact_taken(phone: str | None, email: str | None, company_id: str | None 
 def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
     require_lead_role(user)
     db = get_service_client()
+    owner_id = user.id
+    if body.account_owner_id and body.account_owner_id != user.id:
+        owner_id = _assignable_kam(user, body.account_owner_id)["id"]  # checked before anything is written
     if body.company_id:
         company = live(db.table("companies").select("id,client_since").eq("id", body.company_id), "companies").limit(1).execute().data
         if not company:
             raise NotFoundError("Company not found.")
-        if user.role == Role.SALES_EXECUTIVE:
+        if user.role == Role.KAM:
             mine = db.table("leads").select("id").eq("company_id", body.company_id).eq("owner_id", user.id).limit(1).execute().data
             if not mine:
                 raise ForbiddenError("You can only turn your own leads' companies into clients.")
@@ -273,7 +277,7 @@ def add_client(user: Profile, body: schemas.ClientCreate) -> dict:
             {"company_id": company_id, "name": body.contact_name, "designation": body.designation, "phone": body.phone,
              "phone_key": phone_key(body.phone), "email": body.email, "email_key": email_key(body.email)}
         ).execute()
-    if not make_client(company_id, user.id):
+    if not make_client(company_id, owner_id):
         raise ConflictError("This company is already a client.", data={"companyId": company_id, "isClient": True})
     add_company_activity(company_id, user.id, "client", outcome="added", note="Added as an existing client")
     write_audit(user.id, "create", "clients", company_id, {})
@@ -301,7 +305,8 @@ def _list(user, search, tier, status, owner_id, occasion_soon, no_occasions=Fals
         q = q.ilike("name", f"%{search.strip()}%")
     companies = q.order("name").limit(1000).execute().data
     stats = _stats([c["id"] for c in companies])
-    items = [_summary(c, stats[c["id"]]) for c in companies]
+    found = logos.by_company()
+    items = [{**_summary(c, stats[c["id"]]), **logos.fields(found, c["id"])} for c in companies]
     if tier in ("A", "B", "C"):
         items = [i for i in items if i["tier"] == tier]
     if status in ("active", "dormant"):
@@ -345,7 +350,7 @@ def _detail(user: Profile, company_id: str) -> dict:
         occ_out.append({**o, "next_date": nxt.isoformat() if nxt else None, "days_away": (nxt - today).days if nxt else None})
     occ_out.sort(key=lambda o: o["days_away"] if o["days_away"] is not None else 9999)
     return {
-        "client": _summary(company, stats[company_id]),
+        "client": {**_summary(company, stats[company_id]), **logos.fields(logos.by_company(), company_id)},
         "contacts": _contact_out(company.get("contacts") or []),
         "projects": open_projects + closed,
         "occasions": occ_out,
@@ -356,25 +361,30 @@ def _detail(user: Profile, company_id: str) -> dict:
 
 # --- changing ---------------------------------------------------------------------------------------------------------------------------
 
-def update_client(user: Profile, company_id: str, body: schemas.ClientUpdate) -> dict:
+def _assignable_kam(user: Profile, owner_id: str) -> dict:
+    """The KAM a client may be given to. Assigning and reassigning clients is for sales managers and admins."""
     if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
-        raise ForbiddenError("Only managers and admins change a client's owner or tier.")
+        raise ForbiddenError("Only a sales manager or an admin assigns clients.")
+    rows = get_service_client().table("profiles").select("id,role,is_active,full_name").eq("id", owner_id).limit(1).execute().data
+    if not rows or not rows[0]["is_active"] or rows[0]["role"] not in KAM_VALUES:
+        raise AppError("Pick an active KAM.", {"errors": [{"field": "accountOwnerId", "message": "Pick an active KAM"}]}, 422)
+    return rows[0]
+
+
+def update_client(user: Profile, company_id: str, body: schemas.ClientUpdate) -> dict:
+    if user.role not in ASSIGN_ROLES:  # a KAM only on their own accounts: _client refuses the rest
+        raise ForbiddenError("Your role cannot change a client's owner or tier.")
     company = _client(user, company_id)
     db = get_service_client()
     patch = {}
     if body.account_owner_id and body.account_owner_id != company.get("account_owner_id"):
-        scope = _scope(user)
-        if scope is not None and body.account_owner_id not in scope:
-            raise ForbiddenError("You can only assign clients to your own team.")
-        target = db.table("profiles").select("id,role,is_active,full_name").eq("id", body.account_owner_id).limit(1).execute().data
-        if not target or not target[0]["is_active"] or target[0]["role"] not in (Role.SALES_EXECUTIVE.value, Role.SALES_MANAGER.value, Role.KAM.value):
-            raise AppError("Pick an active sales executive, manager or key account manager.", status_code=422)
+        target = _assignable_kam(user, body.account_owner_id)
         patch["account_owner_id"] = body.account_owner_id
         # The new owner takes over what is in progress: open projects and open client follow-ups.
         par(
             lambda: db.table("leads").update({"owner_id": body.account_owner_id}).eq("company_id", company_id).eq("pipeline", "client").not_.in_("stage", list(CLOSED)).execute(),
             lambda: db.table("tasks").update({"owner_id": body.account_owner_id}).eq("company_id", company_id).is_("done_at", "null").execute(),
-            lambda: add_company_activity(company_id, user.id, "reassign", note=f"Client moved to {target[0]['full_name']}"),
+            lambda: add_company_activity(company_id, user.id, "reassign", note=f"Client moved to {target['full_name']}"),
         )
     if body.clear_tier_override:
         patch["tier_override"] = None
@@ -491,8 +501,8 @@ def complete_followup(user: Profile, company_id: str, task_id: str | None, body:
 # --- projects -----------------------------------------------------------------------------------------------------------------------------------
 
 def _project_owner(user: Profile, company: dict) -> str:
-    """Executives work their own clients; when a manager or admin creates the project, it goes to the account owner."""
-    if user.role == Role.SALES_EXECUTIVE:
+    """A KAM works their own clients; when a manager or admin creates the project, it goes to the account owner."""
+    if user.role == Role.KAM:
         return user.id
     return company.get("account_owner_id") or user.id
 
@@ -567,7 +577,7 @@ def repeat_project(user: Profile, company_id: str, body: schemas.RepeatProject) 
 
 def ensure_occasion_reminders(user: Profile) -> None:
     """Create the 'ask about gifting' calls that are due now, for this person's clients. Runs at most every 10 minutes."""
-    if user.role not in (Role.SALES_EXECUTIVE, Role.SALES_MANAGER, Role.ADMIN):
+    if user.role not in (Role.KAM, Role.SALES_MANAGER, Role.ADMIN):
         return
     try:
         cache.reference("occasion-reminders", user.id, 600, lambda: _make_reminders(user) or True)
@@ -660,8 +670,8 @@ def delete_calendar(calendar_id: str) -> None:
 # --- campaigns ("call every client before Diwali") -----------------------------------------------------------------------------------------------------------
 
 def create_campaign(user: Profile, body: schemas.CampaignCreate) -> dict:
-    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
-        raise ForbiddenError("Only managers and admins start campaigns.")
+    if user.role not in ASSIGN_ROLES:  # a KAM's campaign covers their own accounts (the scope below)
+        raise ForbiddenError("Your role cannot start campaigns.")
     scope = _scope(user)
     db = get_service_client()
     name_key = body.occasion.strip().lower()
@@ -727,11 +737,12 @@ def list_campaigns(user: Profile) -> list[dict]:
 
 def delete_client(user: Profile, company_id: str) -> dict:
     """Soft delete a client added by mistake (a duplicate, test data). Only when it has no business in the CRM: a client
-    with any deal, project or order is kept, because revenue, orders and reports depend on it. Managers and admins only.
+    with any deal, project or order is kept, because revenue, orders and reports depend on it. Managers, admins, and the
+    account's KAM.
     Its open check-ins are closed; contacts and occasions stay with the deleted record."""
     require_ready("companies")
-    if user.role not in (Role.ADMIN, Role.SALES_MANAGER):
-        raise ForbiddenError("Only a manager or an admin can delete a client.")
+    if user.role not in ASSIGN_ROLES:
+        raise ForbiddenError("Your role cannot delete a client.")
     company = _client(user, company_id)
     db = get_service_client()
     deals = live(db.table("leads").select("id,pipeline,stage")).eq("company_id", company_id).execute().data

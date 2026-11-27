@@ -23,7 +23,7 @@ export const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 // Inputs inside a package are compact, so a package reads as one card and not a stack of forms.
 const CELL = "h-9 rounded-lg px-2.5 py-1.5 sm:text-sm";
-const SMALL_LABEL = "mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-500";
+const SMALL_LABEL = "mb-1 block text-[12px] font-semibold uppercase tracking-wide text-slate-500";
 export const OUTLINE_BTN =
   "pressable inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 shadow-sm hover:border-brand/40 hover:text-brand disabled:opacity-40";
 
@@ -273,7 +273,7 @@ export function PackageCard({ index, pkg, error, canRemove, onPatch, onRemove, o
     <div className={cn("space-y-4 rounded-2xl border bg-slate-50/70 p-3 sm:p-4", error ? "border-red-300" : "border-slate-200")}>
       {/* name */}
       <div className="flex flex-wrap items-center gap-2 sm:flex-nowrap sm:gap-3">
-        <span className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">Requirement {no}</span>
+        <span className="shrink-0 rounded-md bg-amber-100 px-2.5 py-1 text-[12px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">Requirement {no}</span>
         <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1">
           <InputField hideLabel label={`Requirement ${no} name`} placeholder="Enter requirement name" value={pkg.name} onChange={(e) => onPatch(() => ({ name: e.target.value }))} className={CELL} />
         </div>
@@ -293,7 +293,7 @@ export function PackageCard({ index, pkg, error, canRemove, onPatch, onRemove, o
           <InputField hideLabel label={`Requirement ${no} quantity`} type="number" integer placeholder="0" value={pkg.quantity} onChange={(e) => onPatch(() => ({ quantity: e.target.value }))} className={CELL} />
         </div>
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
-          <span className="block text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Package subtotal</span>
+          <span className="block text-[12px] font-semibold uppercase tracking-wide text-emerald-700">Package subtotal</span>
           <span className="mt-0.5 block truncate text-lg font-bold tabular-nums text-emerald-700">{inr(subtotal)}</span>
         </div>
       </div>

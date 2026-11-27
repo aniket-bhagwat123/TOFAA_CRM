@@ -88,7 +88,7 @@ export function DatePicker({ label, value, onChange, min, max, error, required, 
           <div className="text-sm font-semibold tracking-tight">{MONTHS[view.m - 1]} {view.y}</div>
           <button type="button" onClick={() => shift(1)} disabled={!canNext} aria-label="Next month" className="pressable rounded-full p-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
         </div>
-        <div className="grid grid-cols-7 text-center text-[11px] font-medium text-slate-400">
+        <div className="grid grid-cols-7 text-center text-[12px] font-medium text-slate-400">
           {WEEKDAYS.map((d) => <div key={d} className="py-1">{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-y-0.5">

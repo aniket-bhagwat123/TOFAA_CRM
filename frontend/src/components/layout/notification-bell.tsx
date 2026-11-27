@@ -79,7 +79,7 @@ export function NotificationBell() {
       >
         <Bell className="h-5 w-5" />
         {badge > 0 && (
-          <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-[1.15rem] min-w-[1.15rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold leading-none text-white ring-2 ring-white">
+          <span aria-hidden="true" className="absolute right-0.5 top-0.5 flex h-[1.15rem] min-w-[1.15rem] items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold leading-none text-white ring-2 ring-white">
             {badge > 99 ? "99+" : badge}
           </span>
         )}
@@ -152,7 +152,7 @@ export function NotificationBell() {
                       <span className="min-w-0 flex-1">
                         <span className={cn("block text-sm text-slate-900", !a.readAt && "font-semibold")}>{a.title}</span>
                         {a.body && <span className="mt-0.5 block text-xs text-slate-500">{a.body}</span>}
-                        <span className="mt-1 block text-[11px] text-slate-400">{ago(a.createdAt)}</span>
+                        <span className="mt-1 block text-[12px] text-slate-400">{ago(a.createdAt)}</span>
                       </span>
                     </button>
                   </li>
@@ -178,7 +178,7 @@ function TabBtn({ active, onClick, count, red, children }: { active: boolean; on
     <button type="button" role="tab" aria-selected={active} onClick={onClick}
       className={cn("-mb-px flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-medium", active ? "border-brand text-brand" : "border-transparent text-slate-500 hover:text-slate-800")}>
       {children}
-      {count > 0 && <span className={cn("rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none", red ? "bg-red-600 text-white" : active ? "bg-brand text-white" : "bg-slate-200 text-slate-700")}>{count}</span>}
+      {count > 0 && <span className={cn("rounded-full px-1.5 py-0.5 text-[11px] font-bold leading-none", red ? "bg-red-600 text-white" : active ? "bg-brand text-white" : "bg-slate-200 text-slate-700")}>{count}</span>}
     </button>
   );
 }
@@ -187,7 +187,7 @@ function Group({ title, count, icon, tone = "slate", children }: { title: string
   const color = tone === "red" ? "text-red-600" : tone === "brand" ? "text-brand" : "text-slate-500";
   return (
     <section className="py-1.5">
-      <h3 className={cn("flex items-center gap-1.5 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wide", color)}>{icon}{title} · {count}</h3>
+      <h3 className={cn("flex items-center gap-1.5 px-4 py-1.5 text-[12px] font-semibold uppercase tracking-wide", color)}>{icon}{title} · {count}</h3>
       {children}
     </section>
   );
@@ -216,7 +216,7 @@ function Row({ title, meta, when, onClick, late }: { title: string; meta: string
         <span className="block truncate text-sm font-medium text-slate-900">{title}</span>
         <span className="block truncate text-xs text-slate-500">{meta}</span>
       </span>
-      <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold", late ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700")}>{when}</span>
+      <span className={cn("shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold", late ? "bg-red-50 text-red-700" : "bg-slate-100 text-slate-700")}>{when}</span>
     </button>
   );
 }

@@ -19,8 +19,8 @@ export function CardShell({ icon: Icon, title, subtitle, action, children, class
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2.5">
         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-brand"><Icon className="h-4 w-4" /></span>
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[15px] font-semibold tracking-tight text-slate-900">{title}</h2>
-          {subtitle && <div className="text-[13px] leading-snug text-slate-500">{subtitle}</div>}
+          <h2 className="truncate text-sm font-semibold tracking-tight text-slate-900">{title}</h2>
+          {subtitle && <div className="text-xs leading-snug text-slate-500">{subtitle}</div>}
         </div>
         {action}
       </div>
@@ -30,7 +30,7 @@ export function CardShell({ icon: Icon, title, subtitle, action, children, class
 }
 
 // Quiet tinted action in a card header (Apple-style): no border, soft brand fill.
-const pill = "min-h-8 shrink-0 rounded-lg border-transparent bg-brand-soft px-3 py-1 text-[13px] text-brand hover:bg-violet-100";
+const pill = "min-h-8 shrink-0 rounded-lg border-transparent bg-brand-soft px-3 py-1 text-xs text-brand hover:bg-violet-100";
 
 // --- deal details -------------------------------------------------------------------------------------------
 
@@ -272,8 +272,8 @@ export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onRelo
         <Step done={!!ag?.sentAt} label="Agreement sent">
           {ag?.sentAt ? formatDate(ag.sentAt) : <button type="button" disabled={closed || busy} onClick={markSent} className="font-medium text-brand hover:underline disabled:opacity-50">Mark as sent</button>}
         </Step>
-        <Step done={!!ag?.invoiceRaisedAt} label="Invoice raised">
-          {ag?.invoiceRaisedAt ? `${ag.invoiceNumber} · ${formatDate(ag.invoiceRaisedAt)}` : (ag?.details || lead.stage === "agreement_payment") && !closed
+        <Step done={!!ag?.invoiceRaisedAt} label="Payment requested">
+          {ag?.invoiceRaisedAt ? formatDate(ag.invoiceRaisedAt) : (ag?.details || lead.stage === "agreement_payment") && !closed
             ? <Button className="mt-1 min-h-8 px-3 py-1 text-xs" onClick={onPayment}><Wallet className="h-3.5 w-3.5" /> Request payment</Button>
             : "After the agreement is prepared"}
         </Step>

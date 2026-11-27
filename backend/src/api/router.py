@@ -34,6 +34,7 @@ from src.modules.tasks.router import router as tasks_router
 from src.modules.team.router import router as team_router
 from src.modules.users.router import router as users_router
 from src.modules.whatsapp.router import router as whatsapp_router
+from src.modules.os_modules.router import router as os_modules_router
 
 api_router = APIRouter()
 
@@ -45,6 +46,7 @@ api_router.include_router(integrations_router)
 # Feature routes
 api_router.include_router(users_router)
 api_router.include_router(people_router)  # KAM and admin
+api_router.include_router(os_modules_router)  # KAM, sales manager and admin
 api_router.include_router(banners_router)  # KAM and admin
 api_router.include_router(gifting_requests_router)  # KAM and admin
 api_router.include_router(gifting_planning_router)  # KAM and admin

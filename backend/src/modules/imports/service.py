@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 
 
-from src.core.access import require_lead_role, visible_owner_ids
+from src.core.access import ASSIGN_ROLES, require_lead_role, visible_owner_ids
 from src.core.audit import write_audit
 from src.core.dates import next_business_day
 from src.core.errors import AppError, ForbiddenError
@@ -13,7 +13,7 @@ from src.core.keys import company_key, email_key, normalize_phone10, phone_key
 from src.core.validators import is_email
 from src.core.supabase import get_service_client
 from src.core.soft_delete import live
-from src.modules.auth.schemas import Profile, Role
+from src.modules.auth.schemas import Profile
 from src.modules.imports.schemas import MAX_ROWS, CommitRequest, ImportRequest, ImportRow
 from src.modules.leads.stages import VALUE_BANDS
 
@@ -226,11 +226,8 @@ def preview(user: Profile, body: ImportRequest) -> dict:
 def commit(user: Profile, body: CommitRequest) -> dict:
     owner_id = user.id
     if body.owner_id and body.owner_id != user.id:
-        if user.role == Role.SALES_EXECUTIVE:
+        if user.role not in ASSIGN_ROLES:
             raise ForbiddenError("You can only import leads for yourself.")
-        visible = visible_owner_ids(user)
-        if visible is not None and body.owner_id not in visible:
-            raise ForbiddenError()
         owner_id = body.owner_id
 
     analysed = _analyse(user, body.rows)

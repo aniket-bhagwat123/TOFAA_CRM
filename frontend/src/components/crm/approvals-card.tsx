@@ -12,10 +12,10 @@ import { apiClient, errorMessage } from "@/services/api-client";
 import type { Approval } from "@/types/crm";
 import { VoiceTextarea } from "./voice-textarea";
 
-type Props = { items: Approval[]; onChanged: () => void };
+type Props = { items: Approval[]; total?: number; onChanged: () => void }; // total: when items is one page of a longer list
 
-/** Quotations whose discount is above the executive's limit. Approve, or reject with a reason, in one step. */
-export function ApprovalsCard({ items, onChanged }: Props) {
+/** Quotations whose discount is above the KAM's limit. Approve, or reject with a reason, in one step. */
+export function ApprovalsCard({ items, total, onChanged }: Props) {
   const [rejecting, setRejecting] = useState<Approval | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export function ApprovalsCard({ items, onChanged }: Props) {
     setBusy(a.id);
     try {
       await apiClient.post(`/quotations/${a.id}/decision`, { approve, note: why?.trim() || null });
-      toast.success(approve ? "Approved. The executive can send it now." : "Rejected");
+      toast.success(approve ? "Approved. The KAM can send it now." : "Rejected");
       setRejecting(null); setNote("");
       onChanged();
     } catch (e) {
@@ -37,7 +37,7 @@ export function ApprovalsCard({ items, onChanged }: Props) {
   if (!items.length) return null;
   return (
     <Card className="space-y-3">
-      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><BadgeCheck className="h-4 w-4 text-amber-500" /> Discounts waiting for approval <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{items.length}</span></h2>
+      <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-800"><BadgeCheck className="h-4 w-4 text-amber-500" /> Discounts waiting for approval <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{total ?? items.length}</span></h2>
       {items.map((a) => (
         <div key={a.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3">
           <div className="min-w-0">
@@ -53,7 +53,7 @@ export function ApprovalsCard({ items, onChanged }: Props) {
 
       <Sheet open={!!rejecting} title="Reject this discount" subtitle={rejecting?.companyName} icon={X} tone="red" onClose={() => setRejecting(null)}>
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">The executive will see your reason and can make a new version with a lower discount.</p>
+          <p className="text-sm text-slate-500">The KAM will see your reason and can make a new version with a lower discount.</p>
           <VoiceTextarea label="Reason (optional)" value={note} onChange={setNote} rows={3} placeholder="Write the reason" />
           <Button variant="danger" className="w-full" loading={busy === rejecting?.id} onClick={() => rejecting && decide(rejecting, false, note)}>Reject</Button>
         </div>

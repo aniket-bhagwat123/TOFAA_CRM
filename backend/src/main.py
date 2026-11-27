@@ -7,13 +7,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from src.api.router import api_router
 from src.core import warmup
+from src.core.selected_client import install_selected_client
 from src.core.cache import install_cache_invalidation
 from src.core.config import settings
 from src.core.errors import register_error_handlers
 from src.core.schema import ok
 from src.core.supabase import get_service_client
 from src.core.telemetry import install_telemetry
-from src.modules.integrations import gifting_people
+from src.modules.integrations import client_sync, gifting_people
 from src.modules.integrations.people_notice import install_people_notice
 
 
@@ -21,6 +22,7 @@ from src.modules.integrations.people_notice import install_people_notice
 async def lifespan(_: FastAPI):
     if not os.environ.get("PYTEST_CURRENT_TEST"):  # tests must not open real connections
         warmup.start()
+        client_sync.worker.start()
     yield
 
 
@@ -42,7 +44,9 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=1024)  # the board and lists are large JSON
 install_cache_invalidation(app)
+install_selected_client(app)
 install_people_notice(app)
+client_sync.install_client_sync(app)
 install_telemetry(app)
 register_error_handlers(app)
 app.include_router(api_router, prefix=settings.API_V1_STR)

@@ -7,9 +7,14 @@ import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { apiClient, errorMessage } from "@/services/api-client";
+import { canDeletePeople } from "@/lib/roles";
+import { useAppSelector } from "@/store/hooks";
 import type { PeopleGroup, PeopleList, Person } from "@/types/people";
 import { AddRecipientsSheet } from "./add-recipients-sheet";
 import { GroupSheet } from "./group-sheet";
+import { useClientFirst } from "@/components/os/client-first";
+import { pickedClient } from "@/lib/selected-client";
+import { usePaged } from "@/components/ui/use-paged";
 
 type Props = {
   companyId?: string; accounts: { id: string; name: string }[]; showAccount: boolean;
@@ -40,6 +45,7 @@ async function fetchMembers(ids: string[]): Promise<Person[]> {
 
 /** The Groups tab: open a group to see its people, search them, add or remove someone; select groups to delete. */
 export function GroupsPanel({ companyId, accounts, showAccount, search, creating, onCreateClose, onChanged }: Props) {
+  const mayDelete = canDeletePeople(useAppSelector((s) => s.auth.session?.profile.role));
   const groups = useApi<PeopleGroup[]>("/people-groups", { companyId: companyId || undefined });
   const [open, setOpen] = useState<string | null>(null);
   const [members, setMembers] = useState<Record<string, Members>>({});
@@ -58,6 +64,9 @@ export function GroupsPanel({ companyId, accounts, showAccount, search, creating
 
   const list = useMemo(() => groups.data ?? [], [groups.data]);
   const filtered = useMemo(() => { const q = search.trim().toLowerCase(); return q ? list.filter((g) => g.name.toLowerCase().includes(q)) : list; }, [list, search]);
+  const paged = usePaged(filtered, ["group", "groups"], `${companyId}|${search}`);
+  // A new group belongs to one client: ask first when all are shown.
+  const ask = useClientFirst({ active: creating, fixed: companyId || pickedClient()?.id, accounts, onCancel: onCreateClose });
   const uniquePeople = new Set(list.flatMap((g) => g.recipientIds)).size;
 
   const loadMembers = useCallback(async (group: PeopleGroup) => {
@@ -131,7 +140,7 @@ export function GroupsPanel({ companyId, accounts, showAccount, search, creating
               <button type="button" role="checkbox" aria-checked="true" aria-label="Unselect all groups" onClick={() => setPicked(new Set())} className="pressable flex h-5 w-5 items-center justify-center rounded bg-brand text-white"><Check className="h-3.5 w-3.5" strokeWidth={3} /></button>
               <span className="text-xs font-semibold text-slate-900">{picked.size} selected</span>
               {picked.size < filtered.length && <button type="button" onClick={() => setPicked(new Set(filtered.map((g) => g.id)))} className="pressable inline-flex h-8 items-center rounded-md px-2.5 text-xs font-semibold text-brand hover:bg-white/70">Select all {filtered.length} groups</button>}
-              <button type="button" onClick={() => setConfirmDelete(true)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Delete</button>
+              {mayDelete && <button type="button" onClick={() => setConfirmDelete(true)} className="pressable inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-xs font-medium text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Delete</button>}
               <button type="button" aria-label="Clear selection" onClick={() => setPicked(new Set())} className="pressable ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5"><X className="h-4 w-4" /></button>
             </div>
           )}
@@ -140,7 +149,7 @@ export function GroupsPanel({ companyId, accounts, showAccount, search, creating
             : !filtered.length ? <p className="px-6 py-12 text-center text-sm text-slate-500">{search ? "No groups match your search." : "No groups yet. Create one to gift many people of a client at once."}</p>
               : (
                 <ul>
-                  {filtered.map((group) => {
+                  {paged.rows.map((group) => {
                     const expanded = open === group.id;
                     const state = members[group.id];
                     const found = new Map((state?.rows ?? []).map((r) => [r.id, r]));
@@ -152,9 +161,9 @@ export function GroupsPanel({ companyId, accounts, showAccount, search, creating
                     return (
                       <li key={group.id} className="border-t border-slate-200/80 first:border-t-0">
                         <div className="flex items-center hover:bg-slate-50/60">
-                          <label className="flex shrink-0 cursor-pointer items-center py-4 pl-4 sm:pl-6">
+                          {mayDelete && <label className="flex shrink-0 cursor-pointer items-center py-4 pl-4 sm:pl-6">
                             <input type="checkbox" aria-label={`Select ${group.name}`} checked={picked.has(group.id)} onChange={() => pick(group.id)} className="h-4 w-4 rounded border-slate-300 text-brand" />
-                          </label>
+                          </label>}
                           <button type="button" aria-expanded={expanded} onClick={() => toggle(group.id)} className="pressable flex w-full items-center gap-4 px-4 py-4 text-left sm:pr-6">
                             {expanded ? <ChevronDown className="h-5 w-5 shrink-0 text-slate-500" /> : <ChevronRight className="h-5 w-5 shrink-0 text-slate-500" />}
                             <span className="min-w-0 flex-1">
@@ -241,9 +250,11 @@ export function GroupsPanel({ companyId, accounts, showAccount, search, creating
           )}
         </section>
       )}
+      {paged.footer}
 
-      <GroupSheet open={!!sheet || creating} group={sheet} accounts={accounts} defaultCompanyId={companyId}
-        onClose={() => { setSheet(null); onCreateClose(); }} onSaved={() => void reload()} onDeleted={() => { setOpen(null); void reload(); }} />
+      {ask.dialog}
+      <GroupSheet open={!!sheet || (creating && ask.ready)} group={sheet} accounts={sheet ? accounts : ask.accounts} defaultCompanyId={sheet ? companyId : ask.clientId}
+        onClose={() => { setSheet(null); onCreateClose(); }} onSaved={() => void reload()} onDeleted={mayDelete ? () => { setOpen(null); void reload(); } : undefined} />
       <AddRecipientsSheet group={addingTo} onClose={() => setAddingTo(null)} onSubmit={(ids, rows) => addMembers(addingTo!, ids, rows)} />
       <DeleteDialog open={!!memberToRemove} title="Remove" confirmLabel="Yes, remove" loading={!!memberToRemove && removing === memberToRemove.id}
         message={`Are you sure you want to remove ${memberToRemove?.name || "this recipient"} from ${memberToRemove?.group.name ?? "this group"}? They stay in the client's people.`}

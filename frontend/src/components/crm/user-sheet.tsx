@@ -185,7 +185,7 @@ export function UserSheet({ open, user, startWithPassword, roles, managers, onCl
           {roles.length > 1 && (
             <SelectField label="Role" required value={role} options={roles.map((r) => ({ value: r, label: ROLE_LABEL[r] }))} onChange={(e) => setRole(e.target.value as Role)} />
           )}
-          {managers.length > 0 && role === "sales_executive" && (
+          {managers.length > 0 && role === "kam" && (
             <SelectField label="Reports to" placeholder="No manager" value={v.managerId} options={managers.filter((m) => m.id !== user?.id).map((m) => ({ value: m.id, label: m.name }))} onChange={set("managerId")} />
           )}
 

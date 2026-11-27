@@ -11,11 +11,11 @@ import { inr } from "@/lib/money";
 import { useAppSelector } from "@/store/hooks";
 import type { TargetCardData } from "@/types/crm";
 
-/** An executive's own month: target vs won, the gap, the pipeline, and what it takes to close the gap. */
+/** A KAM's own month: target vs won, the gap, the pipeline, and what it takes to close the gap. */
 export default function MyTargetPage() {
   const user = useAppSelector((s) => s.auth.session?.profile);
   const router = useRouter();
-  const allowed = user?.role === "sales_executive";
+  const allowed = user?.role === "kam";
   const card = useApi<TargetCardData>(allowed ? "/targets/card" : null);
 
   useEffect(() => { if (user && !allowed) router.replace("/"); }, [user, allowed, router]);

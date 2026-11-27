@@ -16,13 +16,14 @@ import { Button } from "@/components/ui/button";
 import { ClearFilters, FilterLabel, FilterSelect, FilterToggle } from "@/components/ui/filter-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { BoardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { StateView } from "@/components/ui/state-view";
+import { useAllPages } from "@/hooks/use-all-pages";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { STAGE_LABEL } from "@/lib/format";
-import { isManager } from "@/lib/roles";
+import { canAssignLeads, isManager } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 import { useAppSelector } from "@/store/hooks";
 import type { Paged } from "@/types/api";
@@ -59,6 +60,7 @@ export default function LeadsPage() {
   const router = useRouter();
   const user = useAppSelector((s) => s.auth.session?.profile);
   const manager = !!user && isManager(user.role);
+  const assigner = !!user && canAssignLeads(user.role);
 
   const [view, setView] = useState<View>("board");
   const [layout, setLayout] = useState<Layout>("board");
@@ -69,7 +71,6 @@ export default function LeadsPage() {
   const [overdue, setOverdue] = useState(false);
   const [callStatus, setCallStatus] = useState("");
   const [tag, setTag] = useState("");
-  const [page, setPage] = useState(1);
   const [addOpen, setAddOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<Lead | null>(null);
@@ -101,11 +102,11 @@ export default function LeadsPage() {
     setView(v);
     try { localStorage.setItem(VIEW_KEY, v); } catch { /* ignore */ }
   };
-  const reset = (fn: () => void) => { fn(); setPage(1); };
+  const reset = (fn: () => void) => fn();
 
   const common = { search: q, source, callOutcome: callStatus || undefined, tag: tag || undefined, ownerId: owner, overdue: overdue || undefined, pipeline: "new_business" };
   const board = useApi<Lead[]>(view === "board" ? "/leads/board" : null, common);
-  const list = useApi<Paged<Lead>>(view === "table" ? "/leads" : null, { ...common, stage, page, limit: 25 });
+  const list = useAllPages<Paged<Lead>>(view === "table" ? "/leads" : null, { ...common, stage });
   const people = useApi<AssignableUser[]>(manager ? "/users/assignable" : null);
   const reload = () => { void board.reload(); void list.reload(); };
   const actions = useLeadActions(reload);
@@ -118,7 +119,7 @@ export default function LeadsPage() {
     if (next.size > MAX_BULK) return void toast.error(`You can select up to ${MAX_BULK} leads at a time.`);
     setSelected(next);
   };
-  const selection = manager ? { ids: selected, toggle: (id: string) => choose([id], !selected.has(id)), setMany: choose } : undefined;
+  const selection = assigner ? { ids: selected, toggle: (id: string) => choose([id], !selected.has(id)), setMany: choose } : undefined;
 
   const columns = COLUMNS;
   const boardLeads = board.data ?? [];
@@ -177,7 +178,7 @@ export default function LeadsPage() {
       </div>
 
       {/* content */}
-      {active.loading && !active.data && <div className="flex flex-1 items-center justify-center"><Spinner /></div>}
+      {active.loading && !active.data && (view === "board" ? <BoardSkeleton /> : <TableSkeleton columns={7} rows={8} />)}
       {active.error && !active.data && <StateView kind="error" message={active.error} onRetry={reload} />}
       {active.data && isEmpty && (
         <StateView
@@ -199,7 +200,7 @@ export default function LeadsPage() {
               onDrop={() => drop(c)}
               className={cn("flex min-h-0 min-w-[16.5rem] flex-1 flex-col rounded-2xl bg-slate-100/80 p-2.5", over === c.key && "ring-2 ring-brand/40")}
             >
-              <div className="mb-2 flex items-center justify-between gap-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+              <div className="mb-2 flex items-center justify-between gap-1 px-1 text-[12px] font-semibold uppercase tracking-wide text-slate-500">
                 <span className="truncate">{c.label}</span>
                 <span className="rounded-full bg-white px-2 py-0.5 text-slate-600">{byColumn[c.key].length}</span>
               </div>
@@ -220,14 +221,7 @@ export default function LeadsPage() {
               <Button className="ml-auto" onClick={() => setReassigning([...selected])}><UserCog className="h-4 w-4" /> Reassign</Button>
             </div>
           )}
-          <LeadTable leads={list.data.items} canReassign={manager} actions={actions} onEdit={setEditing} selection={selection} />
-          {list.data.meta.pages > 1 && (
-            <div className="flex items-center justify-between gap-3 pt-4 text-sm text-slate-600">
-              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button>
-              <span className="truncate">Page {page} of {list.data.meta.pages} · {list.data.meta.total} leads</span>
-              <Button variant="secondary" disabled={page >= list.data.meta.pages} onClick={() => setPage(page + 1)}>Next</Button>
-            </div>
-          )}
+          <LeadTable leads={list.data.items} canReassign={assigner} actions={actions} onEdit={setEditing} selection={selection} />
         </div>
       )}
 

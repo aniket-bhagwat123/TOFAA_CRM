@@ -2,10 +2,12 @@
 import { useCallback, useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/use-api";
 import { telHref } from "@/lib/format";
-import type { LeadMeta, Quotation, StageKey } from "@/types/crm";
+import type { Lead, LeadMeta, Quotation, StageKey } from "@/types/crm";
 import { AgreementSheet } from "./agreement-sheet";
 import { CloseLeadSheet } from "./close-lead-sheet";
 import { CompleteSheet } from "./complete-sheet";
+import { DeleteRecordDialog } from "./delete-record-dialog";
+import { leadTarget } from "./lead-card";
 import { MeetingSheet } from "./meeting-sheet";
 import { MinutesSheet } from "./minutes-sheet";
 import { NumberPickerSheet } from "./number-picker-sheet";
@@ -36,6 +38,7 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
   const [meeting, setMeeting] = useState<LeadTarget | null>(null);
   const [stage, setStage] = useState<{ target: LeadTarget; stage: StageKey; reopen?: boolean } | null>(null);
   const [reassign, setReassign] = useState<LeadTarget | null>(null);
+  const [removing, setRemoving] = useState<Lead | null>(null);
   const [complete, setComplete] = useState<{ id: string; name: string } | null>(null);
   const [schedule, setSchedule] = useState<LeadTarget | null>(null);
   const [minutes, setMinutes] = useState<LeadTarget | null>(null);
@@ -46,7 +49,7 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
   const [payment, setPayment] = useState<{ target: LeadTarget; amount?: number | null } | null>(null);
 
   const dial = useCallback((t: CallTarget, phone?: string | null) => {
-    // Dial first; the outcome sheet is waiting when the executive comes back from the call.
+    // Dial first; the outcome sheet is waiting when the KAM comes back from the call.
     const href = telHref(phone);
     if (href) window.location.href = href;
     const who = (t.name.split(" · ")[1] ?? t.contactName ?? t.name).trim();
@@ -96,6 +99,12 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
       <StageSheet target={stage?.target ?? null} stage={stage?.stage ?? null} reopen={!!stage?.reopen} lostReasons={meta.data?.lostReasons ?? []} onClose={() => setStage(null)} onDone={onChange} />
       <ReassignSheet target={reassign} currentOwnerId={ownerId} onClose={() => setReassign(null)} onDone={onChange} />
       <CloseLeadSheet target={closing} canMarkWon={false} onClose={() => setClosing(null)} onWon={() => undefined} onLost={(t) => setStage({ target: t, stage: "closed_lost" })} />
+      <DeleteRecordDialog
+        open={!!removing} kind="lead" path={`/leads/${removing?.id}`}
+        name={removing ? leadTarget(removing).name : ""}
+        onClose={() => setRemoving(null)} onDeleted={onChange}
+        onCloseAsLost={() => removing && setClosing(leadTarget(removing))}
+      />
       <CompleteSheet task={complete} onClose={() => setComplete(null)} onDone={onChange} />
       <ScheduleSheet target={schedule} onClose={() => setSchedule(null)} onDone={onChange} />
     </>
@@ -104,7 +113,7 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
   return {
     /** A lost lead back into the pipeline: a plain move with a next date (no paperwork dialogs; they belong to moving forward). */
     reopen: (t: LeadTarget, to: StageKey) => setStage({ target: t, stage: to, reopen: true }),
-    meta: meta.data, call: startCall, logCall: setCall, whatsapp: setWa, meeting: setMeeting, moveTo, reassign: setReassign, close: setClosing,
+    meta: meta.data, call: startCall, logCall: setCall, whatsapp: setWa, meeting: setMeeting, moveTo, reassign: setReassign, close: setClosing, remove: setRemoving,
     complete: setComplete, schedule: setSchedule, minutes: setMinutes, quotation: setQuotation,
     send: (target: LeadTarget, q: Quotation) => setSending({ target, quotation: q }),
     agreement: setAgreement, sampling: setSampling, payment: (target: LeadTarget, amount?: number | null) => setPayment({ target, amount }), sheets,

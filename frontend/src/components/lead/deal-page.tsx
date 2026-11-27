@@ -17,7 +17,7 @@ import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { setCrumb } from "@/lib/crumb";
 import { PIPELINE_STAGES } from "@/lib/format";
-import { isManager } from "@/lib/roles";
+import { canAssignLeads, isManager } from "@/lib/roles";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
 import type { DealData, LeadDetail, StageKey } from "@/types/crm";
@@ -91,7 +91,7 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
     <div className="mx-auto max-w-6xl space-y-4">
       <LeadHeader
         lead={lead}
-        canReassign={!!role && isManager(role)}
+        canReassign={!!role && canAssignLeads(role)}
         onCall={() => actions.call(target)}
         onWhatsApp={() => actions.whatsapp(target)}
         onMeeting={() => actions.meeting(target)}
@@ -99,7 +99,7 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
         onEdit={() => setEditing(true)}
         onReassign={() => actions.reassign(target)}
         onNote={() => setNoting(true)}
-        canDelete={!!role && (isManager(role) || (role === "sales_executive" && lead.ownerId === me))}
+        canDelete={!!role && (isManager(role) || (role === "kam" && lead.ownerId === me))}
         onDelete={() => setDeleting(true)}
       />
       <DeleteRecordDialog
@@ -125,7 +125,7 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
         )}
         {lead.notes && (
           <section className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm sm:p-5">
-            <h2 className="mb-1 text-[15px] font-semibold tracking-tight text-slate-900">{isProject ? "Notes from when the project was created" : "Notes from when the lead was added"}</h2>
+            <h2 className="mb-1 text-sm font-semibold tracking-tight text-slate-900">{isProject ? "Notes from when the project was created" : "Notes from when the lead was added"}</h2>
             <p className="t-body whitespace-pre-wrap text-slate-600">{lead.notes}</p>
           </section>
         )}

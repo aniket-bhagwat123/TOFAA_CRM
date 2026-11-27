@@ -1,10 +1,10 @@
 """The Dashboard: one per role, built only from the data that role's modules show.
 
-Sales Executive: their own pipeline, target, follow-ups, call statuses, quotations and meetings.
+KAM: their own pipeline, target, follow-ups, call statuses, quotations and meetings.
 Sales Manager:   the whole company: pipeline, target vs achieved, overdue and stuck deals, people, approvals.
 Superadmin:      the manager's view plus payments waiting and orders by delivery step.
 Finance:         payments: waiting, partial, confirmed this month, and the ERP connection.
-KAM:             their accounts, upcoming occasions, open projects, their accounts' orders and their follow-ups.
+                 They also get their accounts, upcoming occasions, open projects, their accounts' orders and their follow-ups.
 """
 import logging
 from datetime import datetime, time, timedelta
@@ -28,7 +28,7 @@ ORDER_STEPS = ["new", "production", "quality_check", "dispatched", "delivered"]
 
 def dashboard(user: Profile) -> dict:
     builders = {
-        Role.SALES_EXECUTIVE: _executive, Role.SALES_MANAGER: _manager, Role.ADMIN: _admin,
+        Role.SALES_MANAGER: _manager, Role.ADMIN: _admin,
         Role.FINANCE: _finance, Role.KAM: _kam,
     }
     build = builders.get(user.role)
@@ -65,7 +65,7 @@ def _order_counts(company_ids: list[str] | None) -> dict:
     return counts
 
 
-# --- Sales Executive -----------------------------------------------------------------------------------------------------
+# --- KAM: own sales -----------------------------------------------------------------------------------------------------
 
 def _executive(user: Profile) -> dict:
     db = get_service_client()
@@ -182,6 +182,11 @@ def _finance(user: Profile) -> dict:
 # --- KAM -------------------------------------------------------------------------------------------------------------------------
 
 def _kam(user: Profile) -> dict:
+    """A KAM's own sales (pipeline, target, quotations, meetings) and the accounts they look after."""
+    return {**_executive(user), **_kam_accounts(user)}
+
+
+def _kam_accounts(user: Profile) -> dict:
     from src.modules.clients import service as clients
 
     accounts = clients.list_clients(user, search=None, tier=None, status=None, owner_id=None, occasion_soon=False)

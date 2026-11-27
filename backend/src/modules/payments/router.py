@@ -27,6 +27,11 @@ def confirm(request_id: str, body: Confirm, user: CurrentUserDep):
     return ok(service.confirm(user, request_id, body.amount), "Payment confirmed.")
 
 
+@router.delete("/{request_id}")
+def delete_request(request_id: str, user: CurrentUserDep):
+    return ok(service.delete_request(user, request_id), "Payment request deleted.")
+
+
 # Called by the ERP: no bearer token; protected by the shared-secret signature.
 @router.post("/erp-webhook", include_in_schema=False)
 async def erp_webhook(request: Request):

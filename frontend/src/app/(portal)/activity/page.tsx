@@ -8,7 +8,7 @@ import { activityLook } from "@/components/activity/look";
 import { activityTitle } from "@/components/crm/timeline";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { formatTime } from "@/lib/format";
@@ -56,7 +56,7 @@ function ActivityFeed() {
   const companyId = params.get("client") ?? undefined;
   const user = useAppSelector((s) => s.auth.session?.profile);
   const manager = !!user && isManager(user.role);
-  // Role rules: executives never see Activity; each lead page still shows that lead's own timeline.
+  // Role rules: KAMs never see Activity; each lead page still shows that lead's own timeline.
   useEffect(() => { if (user && !seesActivity(user.role)) router.replace("/"); }, [user, router]);
 
   const [kind, setKind] = useState("");
@@ -141,7 +141,7 @@ function ActivityFeed() {
       </div>
 
       {first.loading && !first.data ? (
-        <div className="flex justify-center py-20"><Spinner /></div>
+        <TableSkeleton columns={3} rows={8} />
       ) : first.error && !first.data ? (
         <StateView kind="error" message={first.error} onRetry={() => void first.reload()} />
       ) : items.length === 0 ? (
@@ -194,7 +194,7 @@ function Row({ a, showSubject }: { a: FeedItem; showSubject: boolean }) {
 
 export default function ActivityPage() {
   return (
-    <Suspense fallback={<div className="flex justify-center py-20"><Spinner /></div>}>
+    <Suspense fallback={<TableSkeleton columns={3} rows={8} />}>
       <ActivityFeed />
     </Suspense>
   );

@@ -7,7 +7,7 @@ from src.modules.clients import service as clients
 from src.modules.leads import service as leads
 
 MGR = Profile(id="m1", role=Role.SALES_MANAGER, full_name="Manager")
-EXEC = Profile(id="e1", role=Role.SALES_EXECUTIVE, full_name="Exec")
+EXEC = Profile(id="e1", role=Role.KAM, full_name="Exec")
 
 
 def lead(stage="new_lead", owner="e1"):
@@ -71,6 +71,6 @@ def test_client_with_business_is_kept(monkeypatch):
     assert "Horizon Retail Group can't be deleted because it has 1 won order and 2 projects" in e.value.message
 
 
-def test_only_managers_delete_clients():
+def test_finance_cannot_delete_clients():
     with pytest.raises(ForbiddenError):
-        clients.delete_client(EXEC, "C1")
+        clients.delete_client(Profile(id="f1", role=Role.FINANCE), "C1")

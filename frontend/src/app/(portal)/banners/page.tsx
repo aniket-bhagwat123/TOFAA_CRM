@@ -7,7 +7,7 @@ import { BannerSheet } from "@/components/banners/banner-sheet";
 import { Button } from "@/components/ui/button";
 import { DeleteDialog } from "@/components/ui/delete-dialog";
 import { PageHeader } from "@/components/ui/page-header";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
 import type { Banner } from "@/types/people";
+import { usePaged } from "@/components/ui/use-paged";
 
 /** Where a banner stands today: live, waiting for its start date, past its end date, or switched off. */
 function state(b: Banner): { label: string; tone: string } {
@@ -27,7 +28,8 @@ function state(b: Banner): { label: string; tone: string } {
   return { label: "Live", tone: "bg-emerald-50 text-emerald-700" };
 }
 
-/** Banners (KAM and admin manage them): pictures shown as a rotating strip at the top of the Gifting OS dashboard only. */
+/** Banners: pictures shown as a rotating strip at the top of the Gifting OS dashboard (and the CRM's OS Home), for
+ * every client or chosen ones. An admin manages them all; a KAM those for their own clients. */
 export default function BannersPage() {
   const role = useAppSelector((s) => s.auth.session?.profile.role);
   const router = useRouter();
@@ -39,6 +41,7 @@ export default function BannersPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => { if (role && !allowed) router.replace("/dashboard"); }, [role, allowed, router]);
+  const paged = usePaged(list.data ?? [], ["banner", "banners"]);
   if (!allowed) return null;
   const reload = () => void list.reload();
 
@@ -72,20 +75,22 @@ export default function BannersPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Banners" description="Wide pictures shown at the top of the Gifting OS dashboard (not in the CRM). Add, order, schedule or switch them off."
+      <PageHeader title="Banners" description={role === "kam" ? "Wide pictures shown at the top of your clients' Gifting OS dashboard. Add, order, schedule or switch them off."
+          : "Wide pictures shown at the top of the Gifting OS dashboard, for every client or chosen ones. Add, order, schedule or switch them off."}
         actions={<Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add banner</Button>} />
 
-      {list.loading && !list.data && <div className="flex justify-center py-12"><Spinner /></div>}
+      {list.loading && !list.data && <TableSkeleton columns={6} rows={5} avatar={false} />}
       {list.error && !list.data && <StateView kind="error" message={list.error} onRetry={reload} />}
       {list.data && list.data.length === 0 && (
         <StateView kind="empty" title="No banners yet" message="Upload a banner picture to show it on the Gifting OS dashboard." action={<Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add banner</Button>} />
       )}
       {list.data && list.data.length > 0 && (
         <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-card">
-          <Table className="min-w-[52rem]">
+          <Table className="min-w-[60rem]">
             <TableHeader className="bg-slate-50/80">
               <TableRow>
                 <TableHead className="pl-4">Banner</TableHead>
+                <TableHead>Clients</TableHead>
                 <TableHead className="text-right">Order</TableHead>
                 <TableHead>Schedule</TableHead>
                 <TableHead>Status</TableHead>
@@ -93,7 +98,7 @@ export default function BannersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.data.map((b) => {
+              {paged.rows.map((b) => {
                 const s = state(b);
                 return (
                   <TableRow key={b.id}>
@@ -106,11 +111,15 @@ export default function BannersPage() {
                         {b.title && <div className="truncate text-xs text-slate-500">{b.title}</div>}
                       </div>
                     </TableCell>
+                    <TableCell className="text-sm text-slate-700">
+                      {!b.clients?.length ? <span className="whitespace-nowrap rounded-full bg-brand-soft px-2 py-0.5 text-[12px] font-semibold text-brand">All clients</span>
+                        : <span className="block max-w-[14rem] truncate" title={b.clients.map((c) => c.name).join(", ")}>{b.clients[0].name}{b.clients.length > 1 ? ` +${b.clients.length - 1} more` : ""}</span>}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{b.sortOrder}</TableCell>
                     <TableCell className="whitespace-nowrap text-xs text-slate-600">
                       {b.startsOn || b.endsOn ? `${b.startsOn ? formatDate(b.startsOn) : "Now"} – ${b.endsOn ? formatDate(b.endsOn) : "no end"}` : "Always"}
                     </TableCell>
-                    <TableCell><span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] font-semibold", s.tone)}>{s.label}</span></TableCell>
+                    <TableCell><span className={cn("whitespace-nowrap rounded-full px-2 py-0.5 text-[12px] font-semibold", s.tone)}>{s.label}</span></TableCell>
                     <TableCell className="pr-4">
                       <div className="flex items-center justify-end gap-1">
                         <Tooltip label={b.isActive ? "Switch off" : "Switch on"}>
@@ -130,6 +139,8 @@ export default function BannersPage() {
           </Table>
         </div>
       )}
+
+      {paged.footer}
 
       <BannerSheet open={adding || !!editing} banner={editing} onClose={() => { setAdding(false); setEditing(null); }} onSaved={reload} />
       <DeleteDialog open={!!removing} title="Delete this banner?" message="It disappears from the Gifting OS dashboard and its picture is removed." loading={busy === removing?.id}

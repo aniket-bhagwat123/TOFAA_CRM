@@ -94,7 +94,7 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={busy}
-          className="pressable mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand text-base font-semibold sm:h-14 sm:text-[17px] text-white shadow-[0_10px_24px_-10px_rgba(15,76,117,0.8)] hover:bg-brand-dark disabled:opacity-70"
+          className="pressable mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-full bg-brand text-base font-semibold sm:h-14 sm:text-base text-white shadow-[0_10px_24px_-10px_rgba(15,76,117,0.8)] hover:bg-brand-dark disabled:opacity-70"
         >
           {busy ? <Spinner className="h-4 w-4" /> : "Sign in"}
         </button>
@@ -102,11 +102,11 @@ export default function LoginPage() {
 
       <div className="mx-auto mt-7 flex max-w-xs items-center gap-4">
         <span className="h-px flex-1 bg-slate-200" />
-        <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} className="text-[15px] text-[#0A2540] hover:text-brand">Need help?</button>
+        <button type="button" onClick={() => setHelp((v) => !v)} aria-expanded={help} className="text-sm text-[#0A2540] hover:text-brand">Need help?</button>
         <span className="h-px flex-1 bg-slate-200" />
       </div>
       {help && (
-        <p className="animate-rise mt-3 rounded-xl bg-brand-50 px-4 py-3 text-center text-[13px] leading-relaxed text-slate-600">
+        <p className="animate-rise mt-3 rounded-xl bg-brand-50 px-4 py-3 text-center text-xs leading-relaxed text-slate-600">
           Forgot your password? Use <Link href="/forgot-password" className="font-medium text-brand hover:underline">Forgot password</Link> to set a new one.
           No account yet, or locked out? Ask your admin.
         </p>
@@ -133,7 +133,7 @@ function IconField({ icon, label, error, trailing, id, ...rest }: IconFieldProps
           placeholder={label}
           aria-invalid={!!error || undefined}
           aria-describedby={error ? `${fieldId}-error` : undefined}
-          className="h-full min-w-0 flex-1 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 text-slate-900 outline-none placeholder:text-slate-400 sm:text-[15px]"
+          className="h-full min-w-0 flex-1 bg-transparent text-base focus-visible:ring-0 focus-visible:ring-offset-0 text-slate-900 outline-none placeholder:text-slate-400 sm:text-sm"
           {...rest}
         />
         {trailing}

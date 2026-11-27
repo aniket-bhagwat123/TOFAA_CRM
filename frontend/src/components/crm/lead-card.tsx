@@ -27,11 +27,11 @@ export const leadTarget = (l: Lead): LeadTarget => ({
 const isClosed = (l: Lead) => l.stage === "closed_won" || l.stage === "closed_lost";
 
 const Chip = ({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "violet" }) => (
-  <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium", tone === "violet" ? "bg-brand-soft text-brand" : "bg-slate-100 text-slate-600")}>{children}</span>
+  <span className={cn("inline-flex items-center rounded-full px-2.5 py-0.5 text-[12px] font-medium", tone === "violet" ? "bg-brand-soft text-brand" : "bg-slate-100 text-slate-600")}>{children}</span>
 );
 
 const Line = ({ icon: Icon, children }: { icon: typeof Phone; children: React.ReactNode }) => (
-  <div className="flex items-center gap-2 text-[13px] text-slate-600">
+  <div className="flex items-center gap-2 text-xs text-slate-600">
     <Icon className="h-3.5 w-3.5 shrink-0 text-slate-400" />
     <span className="truncate">{children}</span>
   </div>
@@ -55,8 +55,8 @@ export function LeadCard({ lead, showOwner, onCall, onWhatsApp }: Props) {
         <div className="flex items-start gap-3">
           <Avatar src={lead.contact.photoUrl} name={lead.contact.name} size="lg" square />
           <div className="min-w-0 flex-1">
-            {lead.pipeline === "client" && lead.projectTitle && <div className="truncate text-[11px] font-semibold uppercase tracking-wide text-brand">{lead.projectTitle}</div>}
-            <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-slate-900 group-hover:text-brand">{lead.company.name}</h3>
+            {lead.pipeline === "client" && lead.projectTitle && <div className="truncate text-[12px] font-semibold uppercase tracking-wide text-brand">{lead.projectTitle}</div>}
+            <h3 className="line-clamp-2 text-sm font-semibold leading-snug text-slate-900 group-hover:text-brand">{lead.company.name}</h3>
             <p className="mt-0.5 truncate text-sm text-slate-500">{lead.contact.name}{lead.contact.designation ? ` · ${lead.contact.designation}` : ""}</p>
           </div>
         </div>
@@ -90,8 +90,8 @@ export function LeadCard({ lead, showOwner, onCall, onWhatsApp }: Props) {
             <span className={cn("flex items-center gap-1.5 text-xs font-medium", fu.tone)}><CalendarClock className="h-3.5 w-3.5 shrink-0" />{fu.text}</span>
           )}
           {showOwner && (
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-              <Avatar name={lead.owner?.fullName} size="xs" className="!h-5 !w-5 !text-[9px]" />
+            <div className="flex items-center gap-1.5 text-[12px] text-slate-500">
+              <Avatar name={lead.owner?.fullName} size="xs" className="!h-5 !w-5 !text-[10px]" />
               <span className="truncate">{lead.owner?.fullName ?? "Unassigned"}</span>
             </div>
           )}

@@ -76,3 +76,8 @@ def approvals(user: CurrentUserDep):
 @router.post("/quotations/{quotation_id}/decision")
 def decision(quotation_id: str, body: schemas.Decision, user: CurrentUserDep):
     return ok(service.decide(user, quotation_id, body), "Decision saved.")
+
+
+@router.delete("/quotations/{quotation_id}")
+def delete_quotation(quotation_id: str, user: CurrentUserDep):
+    return ok(service.delete_quotation(user, quotation_id), "Quotation deleted.")

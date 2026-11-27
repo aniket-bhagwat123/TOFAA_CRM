@@ -29,7 +29,7 @@ def terms_decision(lead_id: str, body: TermsDecision, user: CurrentUserDep):
 
 
 class PaymentRequestIn(CamelModel):
-    invoice_number: str = Field(min_length=1, max_length=60)
+    invoice_number: str | None = Field(default=None, max_length=60)  # left out: a reference is made up
     amount: Decimal | None = Field(default=None, gt=0)
 
 

@@ -10,6 +10,7 @@ import { useApi } from "@/hooks/use-api";
 import { formatDate, todayIso } from "@/lib/format";
 import { apiClient, errorMessage } from "@/services/api-client";
 import type { CalendarDate } from "@/types/crm";
+import { usePaged } from "@/components/ui/use-paged";
 
 /** Festival dates move every year, so Admin keeps them here. Client occasion reminders read their dates from this list. */
 export function OccasionCalendarTab() {
@@ -48,6 +49,7 @@ export function OccasionCalendarTab() {
   }
 
   const upcoming = (list.data ?? []).filter((c) => c.occursOn >= todayIso());
+  const paged = usePaged(upcoming, ["date", "dates"]);
   return (
     <Card className="space-y-4">
       <p className="text-sm text-slate-500">Festival dates for the coming years. Please check the dates of movable festivals (Diwali, Holi, Raksha Bandhan) each year: reminders to call clients are based on them.</p>
@@ -57,7 +59,7 @@ export function OccasionCalendarTab() {
         <Button onClick={add} loading={busy}>Add</Button>
       </div>
       <div className="divide-y divide-slate-100">
-        {upcoming.map((c) => (
+        {paged.rows.map((c) => (
           <div key={c.id} className="flex items-center justify-between py-2.5 text-sm">
             <span className="font-medium">{c.name}</span>
             <span className="flex items-center gap-3 text-slate-500">{formatDate(c.occursOn)} {c.occursOn.slice(0, 4)}
@@ -66,6 +68,7 @@ export function OccasionCalendarTab() {
           </div>
         ))}
       </div>
+      {paged.footer}
     </Card>
   );
 }

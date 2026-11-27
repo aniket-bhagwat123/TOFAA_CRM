@@ -73,9 +73,9 @@ export function PersonPanel({ personId, onClose, onEdit, onChanged }: Props) {
             <h2 className="truncate text-base font-semibold text-slate-900">{p?.name ?? " "}</h2>
             <p className="truncate text-xs text-slate-500">{[p?.designation, p?.account?.name].filter(Boolean).join(" · ")}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              {rel && <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", rel.tone)}>{rel.label}</span>}
-              {p?.status === "ARCHIVED" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Archived</span>}
-              {p?.photoUrl && <button type="button" onClick={() => void photo(null, true)} className="text-[11px] font-medium text-slate-500 hover:text-red-600">Remove photo</button>}
+              {rel && <span className={cn("rounded-full px-2 py-0.5 text-[12px] font-semibold", rel.tone)}>{rel.label}</span>}
+              {p?.status === "ARCHIVED" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[12px] font-semibold text-slate-600">Archived</span>}
+              {p?.photoUrl && <button type="button" onClick={() => void photo(null, true)} className="text-[12px] font-medium text-slate-500 hover:text-red-600">Remove photo</button>}
             </div>
           </div>
           <div className="flex items-center gap-1">
@@ -216,7 +216,7 @@ function Addresses({ id, onChanged }: { id: string; onChanged: () => void }) {
         <div key={a.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3 text-sm">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-              {ADDRESS_LABELS.find((l) => l.value === a.label)?.label}{a.isDefault && <span className="rounded bg-emerald-50 px-1.5 py-px text-[10px] text-emerald-700">Default</span>}
+              {ADDRESS_LABELS.find((l) => l.value === a.label)?.label}{a.isDefault && <span className="rounded bg-emerald-50 px-1.5 py-px text-[11px] text-emerald-700">Default</span>}
             </div>
             <p className="text-slate-800">{[a.addressLine1, a.addressLine2, a.city, a.state, a.postalCode].filter(Boolean).join(", ")}</p>
           </div>
@@ -331,7 +331,7 @@ function History({ id }: { id: string }) {
             <b className="font-semibold">{ACTIONS[e.action] ?? e.action}</b>
             {e.field && <> · {e.field.replace(/_/g, " ")}: <span className="text-slate-500">{show(e.oldValue)}</span> → <span>{show(e.newValue)}</span></>}
           </div>
-          <div className="mt-0.5 text-[11px] text-slate-400">{e.actorName ?? "Someone"} · {formatDateTime(e.createdAt)}{e.source === "IMPORT" ? " · import" : ""}</div>
+          <div className="mt-0.5 text-[12px] text-slate-400">{e.actorName ?? "Someone"} · {formatDateTime(e.createdAt)}{e.source === "IMPORT" ? " · import" : ""}</div>
         </li>
       ))}
     </ol>

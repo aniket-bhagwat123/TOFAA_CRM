@@ -1,9 +1,8 @@
-export type Role = "admin" | "sales_manager" | "sales_executive" | "finance" | "kam";
+export type Role = "admin" | "sales_manager" | "finance" | "kam";
 
 export const ROLE_LABEL: Record<Role, string> = {
   admin: "Admin",
   sales_manager: "Sales Manager",
-  sales_executive: "Sales Executive",
   finance: "Finance",
   kam: "Key Account Manager",
 };

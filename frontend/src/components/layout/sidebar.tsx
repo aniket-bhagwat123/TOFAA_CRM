@@ -106,10 +106,10 @@ export function Sidebar({ user, collapsed, onToggle }: Props) {
               <Icon className="h-[1.15rem] w-[1.15rem] shrink-0" />
               {!collapsed && <span className="truncate">{label}</span>}
               {badge && !collapsed && (
-                <span className="ml-auto shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white" title={`${badge} overdue`}>{badge}</span>
+                <span className="ml-auto shrink-0 rounded-full bg-red-600 px-1.5 py-0.5 text-[12px] font-semibold leading-none text-white" title={`${badge} overdue`}>{badge}</span>
               )}
               {badge && collapsed && (
-                <span aria-hidden="true" className="absolute right-1.5 top-1 min-w-[1.1rem] rounded-full bg-red-600 px-1 py-0.5 text-center text-[10px] font-semibold leading-none text-white ring-2 ring-white">{badge}</span>
+                <span aria-hidden="true" className="absolute right-1.5 top-1 min-w-[1.1rem] rounded-full bg-red-600 px-1 py-0.5 text-center text-[11px] font-semibold leading-none text-white ring-2 ring-white">{badge}</span>
               )}
             </Link>
           );

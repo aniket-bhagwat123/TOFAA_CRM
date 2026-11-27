@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { PageHeader } from "@/components/ui/page-header";
 import { Sheet } from "@/components/ui/sheet";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { useApi } from "@/hooks/use-api";
 import { formatDate } from "@/lib/format";
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { apiClient, errorMessage } from "@/services/api-client";
 import { useAppSelector } from "@/store/hooks";
 import type { Approval } from "@/types/crm";
+import { usePaged } from "@/components/ui/use-paged";
 
 type TermsItem = {
   leadId: string; companyName?: string; contactName?: string; ownerName?: string; total?: number | null; preparedAt?: string | null;
@@ -38,13 +39,15 @@ export default function ApprovalsPage() {
   const [busy, setBusy] = useState<string | null>(null);
 
   useEffect(() => { if (user && !allowed) router.replace("/dashboard"); }, [user, allowed, router]);
+  const pagedTerms = usePaged(terms.data ?? [], ["agreement", "agreements"]);
+  const pagedDiscounts = usePaged(discounts.data ?? [], ["quotation", "quotations"]);
   if (!allowed) return null;
 
   async function decide(item: TermsItem, approve: boolean, why?: string) {
     setBusy(item.leadId);
     try {
       await apiClient.post(`/leads/${item.leadId}/agreement/terms-decision`, { approve, note: why?.trim() || null });
-      toast.success(approve ? "Approved. The executive can download the agreement now." : "Rejected. The executive has been told.");
+      toast.success(approve ? "Approved. The KAM can download the agreement now." : "Rejected. The KAM has been told.");
       setRejecting(null); setNote("");
       void terms.reload();
     } catch (e) {
@@ -60,9 +63,9 @@ export default function ApprovalsPage() {
   return (
     <div className="space-y-5">
       <PageHeader title="Approvals" description="Agreements with non-standard contract terms wait here for a manager." />
-      {loading && <div className="flex justify-center py-12"><Spinner /></div>}
+      {loading && <TableSkeleton columns={4} rows={5} />}
       {terms.error && !terms.data && <StateView kind="error" message={terms.error} onRetry={() => void terms.reload()} />}
-      {empty && <StateView kind="empty" title="Nothing to approve" message="When an executive changes or adds contract terms in an agreement, it shows up here." />}
+      {empty && <StateView kind="empty" title="Nothing to approve" message="When a KAM changes or adds contract terms in an agreement, it shows up here." />}
 
       {!!terms.data?.length && (
         <Card className="space-y-3">
@@ -70,7 +73,7 @@ export default function ApprovalsPage() {
             <FileSignature className="h-4 w-4 text-amber-500" /> Agreement terms waiting for approval
             <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">{terms.data.length}</span>
           </h2>
-          {terms.data.map((item) => (
+          {pagedTerms.rows.map((item) => (
             <div key={item.leadId} className="space-y-3 rounded-xl border border-amber-200/70 bg-amber-50/40 p-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
@@ -88,7 +91,7 @@ export default function ApprovalsPage() {
                 {item.terms.map((t, i) => (
                   <li key={i} className={cn("rounded-lg border px-3 py-2 text-xs", t.custom ? "border-amber-300 bg-white" : "border-transparent bg-white/60 text-slate-500")}>
                     <span className="font-semibold text-slate-800">{String(i + 1).padStart(2, "0")}. {t.title}</span>
-                    {t.custom && <span className="ml-2 rounded bg-amber-100 px-1.5 py-px text-[10px] font-semibold uppercase text-amber-800">Changed / new</span>}
+                    {t.custom && <span className="ml-2 rounded bg-amber-100 px-1.5 py-px text-[11px] font-semibold uppercase text-amber-800">Changed / new</span>}
                     <p className="mt-0.5 text-slate-600">{t.body}</p>
                   </li>
                 ))}
@@ -98,11 +101,14 @@ export default function ApprovalsPage() {
         </Card>
       )}
 
-      {discounts.data && <ApprovalsCard items={discounts.data} onChanged={() => void discounts.reload()} />}
+      {pagedTerms.footer}
+
+      {discounts.data && <ApprovalsCard items={pagedDiscounts.rows} total={discounts.data.length} onChanged={() => void discounts.reload()} />}
+      {pagedDiscounts.footer}
 
       <Sheet open={!!rejecting} title="Reject these terms" subtitle={rejecting?.companyName} icon={X} tone="red" onClose={() => setRejecting(null)}>
         <div className="space-y-4">
-          <p className="text-sm text-slate-500">The executive sees your reason, changes the terms and saves again.</p>
+          <p className="text-sm text-slate-500">The KAM sees your reason, changes the terms and saves again.</p>
           <VoiceTextarea label="Reason (optional)" value={note} onChange={setNote} rows={3} placeholder="Write the reason" />
           <Button variant="danger" className="w-full" loading={busy === rejecting?.leadId} onClick={() => rejecting && decide(rejecting, false, note)}>Reject</Button>
         </div>

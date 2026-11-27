@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Spinner } from "@/components/ui/spinner";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/ui/avatar";
 import { useApi } from "@/hooks/use-api";
 import { inrShort } from "@/lib/money";
@@ -19,7 +19,7 @@ const shift = (m: string, by: number) => ym(new Date(Number(m.slice(0, 4)), Numb
 type Props = { open: boolean; onClose: () => void; onSaved: () => void };
 type Draft = { target: string; discount: string };
 
-/** Monthly target and discount limit for each executive. A value carries forward to later months until someone changes it. */
+/** Monthly target and discount limit for each KAM. A value carries forward to later months until someone changes it. */
 export function TargetsModal({ open, onClose, onSaved }: Props) {
   const [month, setMonth] = useState(ym(new Date()));
   const list = useApi<{ month: string; members: TargetMember[] }>(open ? "/targets" : null, { month });
@@ -53,19 +53,19 @@ export function TargetsModal({ open, onClose, onSaved }: Props) {
   const label = `${MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
 
   return (
-    <Modal open={open} onClose={onClose} title="Targets and discount limits" subtitle="Set per executive, for each month" icon={Target} tone="violet" width="lg">
+    <Modal open={open} onClose={onClose} title="Targets and discount limits" subtitle="Set per KAM, for each month" icon={Target} tone="violet" width="lg">
       <div className="mb-4 flex items-center justify-center gap-3">
         <button type="button" onClick={() => setMonth(shift(month, -1))} aria-label="Previous month" className="pressable rounded-full p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft className="h-4 w-4" /></button>
         <span className="min-w-36 text-center text-sm font-semibold">{label}</span>
         <button type="button" onClick={() => setMonth(shift(month, 1))} aria-label="Next month" className="pressable rounded-full p-2 text-slate-500 hover:bg-slate-100"><ChevronRight className="h-4 w-4" /></button>
       </div>
-      {list.loading && !list.data && <div className="flex justify-center py-8"><Spinner /></div>}
+      {list.loading && !list.data && <TableSkeleton columns={3} rows={4} />}
       {list.error && !list.data && <p className="text-sm text-red-600">{list.error}</p>}
-      {list.data && list.data.members.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No sales executives to set targets for yet.</p>}
+      {list.data && list.data.members.length === 0 && <p className="py-6 text-center text-sm text-slate-500">No KAMs to set targets for yet.</p>}
       {list.data && list.data.members.length > 0 && (
         <div className="space-y-2">
-          <div className="hidden grid-cols-[1fr_9rem_7rem_6rem_5rem] gap-3 px-2 text-[11px] font-medium uppercase tracking-wide text-slate-400 sm:grid">
-            <span>Executive</span><span>Target (₹)</span><span>Discount limit (%)</span><span>Won so far</span><span />
+          <div className="hidden grid-cols-[1fr_9rem_7rem_6rem_5rem] gap-3 px-2 text-[12px] font-medium uppercase tracking-wide text-slate-400 sm:grid">
+            <span>KAM</span><span>Target (₹)</span><span>Discount limit (%)</span><span>Won so far</span><span />
           </div>
           {list.data.members.map((m) => {
             const d = val(m);
@@ -79,7 +79,7 @@ export function TargetsModal({ open, onClose, onSaved }: Props) {
               </div>
             );
           })}
-          <p className="px-1 pt-2 text-xs text-slate-400">A value set for one month carries forward until it is changed. An executive's quotation discount above their limit goes to their manager for approval.</p>
+          <p className="px-1 pt-2 text-xs text-slate-400">A value set for one month carries forward until it is changed. A KAM's quotation discount above their limit goes to their manager for approval.</p>
         </div>
       )}
     </Modal>

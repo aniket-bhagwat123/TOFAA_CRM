@@ -83,7 +83,7 @@ export function LeadPanel({ leadId, onClose }: Props) {
                 {notes.slice(0, 5).map((n) => (
                   <div key={n.id} className="rounded-xl border border-slate-100 p-3">
                     <p className="whitespace-pre-line text-sm text-slate-700">{n.note}</p>
-                    <p className="mt-1 text-[11px] text-slate-400">{n.actor?.fullName ? `${n.actor.fullName} · ` : ""}{formatDateTime(n.createdAt)}</p>
+                    <p className="mt-1 text-[12px] text-slate-400">{n.actor?.fullName ? `${n.actor.fullName} · ` : ""}{formatDateTime(n.createdAt)}</p>
                   </div>
                 ))}
                 {!lead.notes && !notes.length && <p className="text-sm text-slate-500">No notes yet.</p>}
@@ -109,7 +109,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   return (
     <section className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
+        <h3 className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">{title}</h3>
         {action}
       </div>
       {children}

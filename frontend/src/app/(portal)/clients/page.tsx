@@ -5,19 +5,20 @@ import { useEffect, useState } from "react";
 import { AddClientSheet } from "@/components/clients/add-client-sheet";
 import { CampaignModal } from "@/components/clients/campaign-modal";
 import { ClientCard } from "@/components/clients/client-card";
+import { ManageClientSheet } from "@/components/clients/client-small-sheets";
 import { ClientTable } from "@/components/clients/client-table";
 import { ClientFollowUpSheet, type ClientTaskTarget } from "@/components/clients/followup-sheets";
 import { Button } from "@/components/ui/button";
 import { ClearFilters, FilterLabel, FilterSelect } from "@/components/ui/filter-bar";
 import { PageHeader } from "@/components/ui/page-header";
 import { SearchInput } from "@/components/ui/search-input";
-import { Spinner } from "@/components/ui/spinner";
+import { BoardSkeleton, TableSkeleton } from "@/components/ui/skeleton";
 import { StateView } from "@/components/ui/state-view";
 import { BOARD_TABLE, ViewToggle } from "@/components/ui/view-toggle";
 import { useApi } from "@/hooks/use-api";
 import { useDebounce } from "@/hooks/use-debounce";
 import { openWhatsApp, telHref } from "@/lib/format";
-import { isManager } from "@/lib/roles";
+import { canManageClients, isManager } from "@/lib/roles";
 import { useAppSelector } from "@/store/hooks";
 import type { AssignableUser, ClientSummary } from "@/types/crm";
 
@@ -27,6 +28,7 @@ export default function ClientsPage() {
   const router = useRouter();
   const role = useAppSelector((s) => s.auth.session?.profile.role);
   const manager = !!role && isManager(role);
+  const canManage = !!role && canManageClients(role);
   const [search, setSearch] = useState("");
   const [tier, setTier] = useState("");
   const [status, setStatus] = useState("");
@@ -35,6 +37,7 @@ export default function ClientsPage() {
   const [calling, setCalling] = useState<ClientTaskTarget | null>(null);
   const [adding, setAdding] = useState(false);
   const [campaign, setCampaign] = useState(false);
+  const [assigning, setAssigning] = useState<ClientSummary | null>(null);
   const [layout, setLayout] = useState<"board" | "table">("board");
   const q = useDebounce(search, 300);
 
@@ -58,13 +61,13 @@ export default function ClientsPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <PageHeader title={role === "kam" ? "My Accounts" : "Clients"} />
+      <PageHeader title="Client Management" />
       {/* Row 1: search on the left; view switch, Campaign and Add client on the right */}
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput className="min-w-0 flex-1 sm:max-w-sm" value={search} onChange={setSearch} placeholder="Search clients" />
         <div className="ml-auto flex shrink-0 items-center gap-2">
           <ViewToggle value={layout} onChange={chooseLayout} options={BOARD_TABLE} />
-          {manager && <Button variant="secondary" onClick={() => setCampaign(true)}><Megaphone className="h-4 w-4" /><span className="hidden sm:inline">Campaign</span></Button>}
+          {canManage && <Button variant="secondary" onClick={() => setCampaign(true)}><Megaphone className="h-4 w-4" /><span className="hidden sm:inline">Campaign</span></Button>}
           <Button onClick={() => setAdding(true)}><Plus className="h-4 w-4" /> Add client</Button>
         </div>
       </div>
@@ -83,8 +86,8 @@ export default function ClientsPage() {
         {shown != null && <span className="t-meta ml-auto whitespace-nowrap">{shown} {shown === 1 ? "client" : "clients"}</span>}
       </div>
 
-      <div className="min-h-0 flex-1">
-        {list.loading && !list.data && <div className="flex h-full min-h-[16rem] items-center justify-center"><Spinner /></div>}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {list.loading && !list.data && (layout === "board" ? <BoardSkeleton /> : <TableSkeleton columns={6} rows={8} />)}
         {list.error && !list.data && <StateView kind="error" message={list.error} onRetry={() => void list.reload()} />}
         {list.data && list.data.length === 0 && (
           <StateView
@@ -95,17 +98,19 @@ export default function ClientsPage() {
           />
         )}
         {list.data && list.data.length > 0 && layout === "table" && (
-          <ClientTable clients={list.data} showOwner={manager} onCall={call} onWhatsApp={(c) => openWhatsApp(c.primaryContact?.phone)} />
+          <ClientTable clients={list.data} showOwner={manager} onAssign={manager ? setAssigning : undefined} onCall={call} onWhatsApp={(c) => openWhatsApp(c.primaryContact?.phone)} />
         )}
         {list.data && list.data.length > 0 && layout === "board" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {list.data.map((c) => (
-              <ClientCard key={c.id} client={c} showOwner={manager} onCall={() => call(c)} onWhatsApp={() => openWhatsApp(c.primaryContact?.phone)} />
+              <ClientCard key={c.id} client={c} showOwner={manager} onAssign={manager ? () => setAssigning(c) : undefined} onCall={() => call(c)} onWhatsApp={() => openWhatsApp(c.primaryContact?.phone)} />
             ))}
           </div>
         )}
       </div>
 
+
+      <ManageClientSheet client={assigning} onClose={() => setAssigning(null)} onDone={() => void list.reload()} />
       <AddClientSheet open={adding} onClose={() => setAdding(false)} onDone={(id) => router.push(`/clients/${id}`)} />
       <CampaignModal open={campaign} onClose={() => setCampaign(false)} />
       <ClientFollowUpSheet target={calling} onClose={() => setCalling(null)} onDone={(pid) => (pid ? router.push(`/projects/${pid}`) : void list.reload())} />
