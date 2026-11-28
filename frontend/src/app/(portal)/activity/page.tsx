@@ -34,7 +34,7 @@ const KINDS: [string, string][] = [
   ["sample", "Samples"],
   ["agreement", "Agreements"],
   ["payment", "Payments"],
-  ["order", "Orders"],
+  ["order", "Deals"],
 ];
 const IST = "Asia/Kolkata";
 const dayKey = (iso: string) => new Intl.DateTimeFormat("en-CA", { timeZone: IST }).format(new Date(iso));

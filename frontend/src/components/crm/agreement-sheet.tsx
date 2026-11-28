@@ -3,6 +3,7 @@ import { Check, Download, FileSignature, Layers, Loader2, Plus, RotateCcw, Trash
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { AgreementDelivery, blankDelivery, deliveryErrors, deliveryPayload, fromDelivery, type DeliveryDraft } from "@/components/crm/agreement-delivery";
 import { InputField, TextareaField } from "@/components/ui/input-field";
 import { SelectField } from "@/components/ui/select-field";
 import { Sheet } from "@/components/ui/sheet";
@@ -57,6 +58,8 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
   const [remarks, setRemarks] = useState("");
   const [busy, setBusy] = useState<"save" | "pdf" | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [delivery, setDelivery] = useState<DeliveryDraft>(blankDelivery);
+  const [itemUploads, setItemUploads] = useState<Record<number, number>>({}); // item id -> photos on the way
   const loadedFor = useRef<string | null>(null);
 
   const ag = deal.data?.agreement;
@@ -71,6 +74,7 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     const quote = deal.data.quotations[0];
     if (d) {
       setPackages(fromPackages(d.packages));
+      setDelivery(fromDelivery(d.handover));
       setScope(d.scope); setScopeOther(d.scopeOther ?? ""); setTransport(d.transportation ? String(d.transportation) : "");
       setGstRate(d.gstRate); setTerms(withKeys(d.terms)); setTofaaSignee(d.tofaaSignee ?? ""); setClientSignee(d.clientSignee ?? ""); setRemarks(d.remarks ?? "");
     } else {
@@ -86,10 +90,11 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     loadedFor.current = null;
     setPackages([]); setScope(DEFAULT_SCOPE); setScopeOther(""); setTransport(""); setGstRate(18); setTerms([]);
     setTofaaSignee(""); setClientSignee(""); setRemarks(""); setErrors({});
+    setDelivery(blankDelivery()); setItemUploads({});
   }, [target]);
 
   const t = totalsFor(packages, transport, gstRate);
-  const uploading = packages.some((p) => p.uploading > 0);
+  const uploading = packages.some((p) => p.uploading > 0) || Object.values(itemUploads).some((n) => n > 0);
   const clear = (k: string) => setErrors((e) => ({ ...e, [k]: "" }));
 
   const patchPackage = (key: number, fn: (p: PackageDraft) => Partial<PackageDraft>) => {
@@ -122,13 +127,37 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
     }));
   }
 
+  async function uploadItemPhotos(key: number, itemId: number, files: File[]) {
+    if (!target) return;
+    const have = packages.find((p) => p.key === key)?.items.find((i) => i.id === itemId)?.photos?.length ?? 0;
+    const good = files.filter((f) => {
+      if (!PHOTO_TYPES.includes(f.type)) { toast.error(`${f.name}: use a JPEG, PNG or WebP image`); return false; }
+      if (f.size > MAX_PHOTO_BYTES) { toast.error(`${f.name}: each photo must be 5 MB or smaller`); return false; }
+      return true;
+    });
+    const batch = good.slice(0, Math.max(MAX_PACKAGE_PHOTOS - have - (itemUploads[itemId] ?? 0), 0));
+    const count = (n: number) => setItemUploads((all) => ({ ...all, [itemId]: (all[itemId] ?? 0) + n }));
+    count(batch.length);
+    await Promise.all(batch.map(async (f) => {
+      try {
+        const form = new FormData();
+        form.append("file", f);
+        const res = await apiClient.post<QuotationPhoto>(`/leads/${target.leadId}/quotation-photos`, form, { timeout: 60000 });
+        patchPackage(key, (p) => ({ items: p.items.map((i) => (i.id === itemId ? { ...i, photos: [...(i.photos ?? []), res.data] } : i)) }));
+      } catch (err) {
+        toast.error(`${f.name}: ${errorMessage(err)}`);
+      } finally { count(-1); }
+    }));
+  }
+
   /** Checks and saves the prepared agreement. Returns the saved state, or false when something needs fixing. */
   async function saveDetails(): Promise<AgreementState | false> {
     if (!target) return false;
-    const e = packageErrors(packages);
+    const e: Record<string, string> = packageErrors(packages);
     if (!Object.keys(e).length && t.total <= 0) e.packages = "The total must be greater than 0";
     if (scope.includes("other") && !scopeOther.trim()) e.scopeOther = "Describe the other work";
     terms.forEach((x, n) => { if (!x.title.trim() || !x.body.trim()) e[`term-${x.key}`] = `Term ${n + 1} needs a title and text`; });
+    Object.assign(e, deliveryErrors(delivery));
     setErrors(e);
     if (Object.keys(e).length) { toast.error("Some details need fixing"); return false; }
     if (uploading) { toast.info("Wait for the photos to finish uploading"); return false; }
@@ -137,6 +166,7 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
         packages: packagesPayload(packages), scope, scopeOther: scope.includes("other") ? scopeOther.trim() : null,
         transportation: Number(transport) || 0, gstRate, terms: terms.map(({ title, body }) => ({ title: title.trim(), body: body.trim() })),
         tofaaSignee: tofaaSignee.trim() || null, clientSignee: clientSignee.trim() || null, remarks: remarks.trim() || null,
+        handover: deliveryPayload(delivery),
       });
       return res.data;
     } catch (err) {
@@ -204,10 +234,14 @@ export function AgreementSheet({ target, onClose, onDone }: Props) {
                 </div>
                 {packages.map((p, n) => (
                   <PackageCard key={p.key} index={n} pkg={p} error={errors[`pkg-${p.key}`]} canRemove={packages.length > 1}
-                    onPatch={(fn) => patchPackage(p.key, fn)} onRemove={() => setPackages((all) => all.filter((x) => x.key !== p.key))} onUpload={(f) => void uploadPhotos(p.key, f)} />
+                    onPatch={(fn) => patchPackage(p.key, fn)} onRemove={() => setPackages((all) => all.filter((x) => x.key !== p.key))} onUpload={(f) => void uploadPhotos(p.key, f)}
+                    kit={{ uploading: itemUploads, onItemPhotos: (id, f) => void uploadItemPhotos(p.key, id, f) }} />
                 ))}
                 {errors.packages && <p role="alert" className="text-xs font-medium text-red-600">{errors.packages}</p>}
               </section>
+
+              <AgreementDelivery value={delivery} errors={errors} severalPackages={packages.length > 1}
+                onChange={(next) => { setDelivery(next); setErrors({}); }} />
 
               {/* scope of work */}
               <section className="space-y-2">

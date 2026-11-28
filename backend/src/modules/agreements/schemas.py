@@ -1,10 +1,12 @@
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
 from pydantic import Field, StringConstraints, field_validator
 
 from src.core.schema import CamelModel
-from src.modules.quotations.schemas import PackageIn
+from src.modules.orders.handover_schemas import LocationIn
+from src.modules.quotations.schemas import PackageIn, PackageItemIn
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, max_length=120)]
 
@@ -34,8 +36,35 @@ class TermIn(CamelModel):
     body: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
 
 
+class AgreementItemIn(PackageItemIn):
+    """An item of a package, with what the OMS handover also needs about it. All optional."""
+
+    quantity_per_kit: int | None = Field(default=None, ge=1, le=10_000_000)
+    is_packaging: bool = False
+    product_id: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    photos: list[str] = Field(default_factory=list, max_length=10)
+
+
+class AgreementPackageIn(PackageIn):
+    items: list[AgreementItemIn] = Field(default_factory=list, max_length=50)
+
+
+class DeliveryDetailsIn(CamelModel):
+    """Taken once, with the agreement, and carried into the OMS handover. Anything not known yet is left empty."""
+
+    expected_delivery: date | None = None
+    advance_percent: Decimal | None = Field(default=None, ge=0, le=100, decimal_places=2)
+    campaign_name: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    client_type: Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)] | None = None
+    instructions: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] | None = None
+    design_brief: Annotated[str, StringConstraints(strip_whitespace=True, max_length=5000)] | None = None
+    sample_required: bool | None = None
+    delivery_locations: list[LocationIn] = Field(default_factory=list, max_length=500)
+
+
 class AgreementDetails(CamelModel):
-    packages: list[PackageIn] = Field(min_length=1, max_length=20)
+    packages: list[AgreementPackageIn] = Field(min_length=1, max_length=20)
+    handover: DeliveryDetailsIn | None = None  # left out: the saved delivery details stay
     scope: list[str] = Field(default_factory=list, max_length=len(SCOPE))
     scope_other: Text | None = None
     transportation: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("10000000000"))

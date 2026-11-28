@@ -1,8 +1,10 @@
 "use client";
-import { CalendarCheck, Check, Download, FilePlus2, FileSignature, FileText, Handshake, Images, NotebookPen, Pencil, Plus, Send, Wallet } from "lucide-react";
+import { CalendarCheck, Check, Download, FilePlus2, FileSignature, FileText, Handshake, Images, NotebookPen, Pencil, Plus, Send } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { FileButton } from "@/components/ui/file-button";
 import { InputField } from "@/components/ui/input-field";
 import { Sheet } from "@/components/ui/sheet";
 import { openPdf } from "@/features/media/download";
@@ -235,10 +237,37 @@ function Step({ done, label, children }: { done: boolean; label: string; childre
   );
 }
 
-export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onReload }: { lead: Lead; deal: DealData | null; closed: boolean; onPrepare: () => void; onPayment: () => void; onReload: () => void }) {
+export function AgreementCard({ lead, deal, closed, onPrepare, onReload }: { lead: Lead; deal: DealData | null; closed: boolean; onPrepare: () => void; onReload: () => void }) {
   const [busy, setBusy] = useState(false);
   const ag = deal?.agreement;
-  const pay = ag?.payment;
+  const paid = ag?.omsPaymentStatus === "success"; // payment is approved in OMS; the CRM only shows it
+  const router = useRouter();
+
+  async function startHandover() {
+    setBusy(true);
+    try {
+      const res = await apiClient.post<{ orderId: string }>(`/orders/handover/from-lead/${lead.id}`);
+      router.push(`/deals/${res.data.orderId}`);
+    } catch (e) {
+      toast.error(errorMessage(e), { duration: 8000 });
+      setBusy(false);
+    }
+  }
+
+  async function uploadSigned(file: File) {
+    setBusy(true);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      await apiClient.post(`/leads/${lead.id}/agreement/signed`, body, { timeout: 60000 });
+      toast.success("Signed agreement saved");
+      onReload();
+    } catch (e) {
+      toast.error(errorMessage(e), { duration: 8000 });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function markSent() {
     setBusy(true);
@@ -255,8 +284,8 @@ export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onRelo
   return (
     <CardShell
       icon={FileSignature}
-      title="Agreement & payment"
-      subtitle={pay?.status === "confirmed" ? "Paid" : ag?.details ? `Prepared · ${inr(ag.totalAmount ?? 0)}${ag.termsStatus === "pending" ? " · terms waiting for approval" : ag.termsStatus === "rejected" ? " · terms rejected" : ""}` : "Prepared, sent, invoiced, paid"}
+      title="Agreement"
+      subtitle={ag?.details ? `Prepared · ${inr(ag.totalAmount ?? 0)}${ag.termsStatus === "pending" ? " · terms waiting for approval" : ag.termsStatus === "rejected" ? " · terms rejected" : ""}` : "Prepared, sent, signed"}
       action={
         <div className="flex items-center gap-1.5">
           {ag?.details && <Button variant="ghost" className="min-h-8 px-2.5 py-1 text-xs" onClick={() => void openPdf(`/leads/${lead.id}/agreement/pdf`)}><Download className="h-3.5 w-3.5" /> PDF</Button>}
@@ -272,17 +301,28 @@ export function AgreementCard({ lead, deal, closed, onPrepare, onPayment, onRelo
         <Step done={!!ag?.sentAt} label="Agreement sent">
           {ag?.sentAt ? formatDate(ag.sentAt) : <button type="button" disabled={closed || busy} onClick={markSent} className="font-medium text-brand hover:underline disabled:opacity-50">Mark as sent</button>}
         </Step>
-        <Step done={!!ag?.invoiceRaisedAt} label="Payment requested">
-          {ag?.invoiceRaisedAt ? formatDate(ag.invoiceRaisedAt) : (ag?.details || lead.stage === "agreement_payment") && !closed
-            ? <Button className="mt-1 min-h-8 px-3 py-1 text-xs" onClick={onPayment}><Wallet className="h-3.5 w-3.5" /> Request payment</Button>
-            : "After the agreement is prepared"}
+        <Step done={!!ag?.signedAt} label="Agreement signed">
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {ag?.signedAt && <span>{formatDate(ag.signedAt)}</span>}
+            {ag?.signedUrl && <a href={ag.signedUrl} target="_blank" rel="noreferrer" className="font-medium text-brand hover:underline">View copy</a>}
+            {lead.stage !== "closed_lost" && (
+              <FileButton accept=".pdf,.docx,.jpg,.jpeg,.png,.webp" busy={busy} onFiles={(files) => void uploadSigned(files[0])}>
+                {ag?.signedAt ? "Replace" : "Upload signed copy"}
+              </FileButton>
+            )}
+          </span>
         </Step>
-        <Step done={pay?.status === "confirmed"} label="Payment received">
-          {pay?.status === "confirmed" ? `${inr(pay.amountPaid)}${pay.confirmedAt ? ` · ${formatDate(pay.confirmedAt)}` : ""}`
-            : pay?.status === "partial" ? `${inr(pay.amountPaid)} of ${inr(pay.amount)} received`
-            : pay ? "Waiting for Finance to record it" : "Only Finance or the ERP can mark this"}
+        <Step done={paid} label="Payment status">
+          <span className={cn("rounded-full px-2 py-0.5 font-semibold", paid ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800")}>{paid ? "Success" : "Pending"}</span>
+          <span className="ml-2">Updated by the OMS</span>
         </Step>
       </ol>
+      {ag?.signedAt && lead.stage !== "closed_lost" && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3.5">
+          <p className="text-xs text-slate-500">The agreement is signed: prepare the handover for OMS.</p>
+          <Button className="min-h-8 px-3 py-1 text-xs" loading={busy} onClick={() => void startHandover()}><Send className="h-3.5 w-3.5" /> OMS handover</Button>
+        </div>
+      )}
     </CardShell>
   );
 }

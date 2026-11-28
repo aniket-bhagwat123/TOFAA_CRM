@@ -6,10 +6,11 @@ from decimal import Decimal
 
 from src.core.audit import write_audit
 from src.core.dates import now_ist, today_ist
+from src.core.documents import checked_document
 from src.core.errors import AppError, ConflictError, ForbiddenError
 from src.core.money import format_inr, to_money
 from src.core.parallel import par
-from src.core.storage import DOCUMENTS, signed_urls
+from src.core.storage import DOCUMENTS, signed_urls, upload_document
 from src.core.supabase import get_service_client
 from src.core.timeline import add_activity
 from src.modules.agreements import schemas
@@ -17,6 +18,7 @@ from src.modules.auth.schemas import Profile, Role
 from src.modules.leads import service as leads
 from src.modules.leads.stages import CLOSED
 from src.modules.notifications.service import notify
+from src.modules.orders import handover, handover_rules
 
 log = logging.getLogger(__name__)
 DETAILS_NOT_READY = "Preparing the agreement is not set up yet. An admin needs to apply the database migration 20260113000000_agreement_details.sql, then try again."
@@ -34,12 +36,20 @@ def state(lead_id: str) -> dict:
     )
     ag = ag[0] if ag else {}
     details = ag.get("details")
-    photo_paths = [x for p in ((details or {}).get("packages") or []) for x in (p.get("photos") or [])]
+    packages = (details or {}).get("packages") or []
+    photo_paths = [x for p in packages for x in (p.get("photos") or [])]
+    photo_paths += [x for p in packages for i in p.get("items") or [] for x in (i.get("photos") or [])]
     urls = signed_urls(DOCUMENTS, [ag.get("signed_path"), *photo_paths])
     url = urls.get(ag.get("signed_path") or "")
     if details:
-        details = {**details, "packages": [{**p, "photos": [{"path": x, "url": urls.get(x)} for x in (p.get("photos") or [])]} for p in details.get("packages") or []]}
+        def shown(paths):
+            return [{"path": x, "url": urls.get(x)} for x in paths or []]
+
+        details = {**details, "packages": [
+            {**p, "photos": shown(p.get("photos")), "items": [{**i, "photos": shown(i.get("photos"))} for i in p.get("items") or []]}
+            for p in packages]}
     return {
+        "omsPaymentStatus": _oms_payment(lead_id),
         "details": details, "totalAmount": ag.get("total_amount"), "preparedAt": ag.get("prepared_at"),
         "termsStatus": ag.get("terms_status") or "standard", "termsNote": ag.get("terms_note"),
         "options": {"scope": [{"value": k, "label": v} for k, v in schemas.SCOPE.items()], "gstRates": list(schemas.GST_RATES), "defaultTerms": schemas.DEFAULT_TERMS},
@@ -47,6 +57,16 @@ def state(lead_id: str) -> dict:
         "invoiceNumber": ag.get("invoice_number"), "invoiceRaisedAt": ag.get("invoice_raised_at"), "paymentReceivedAt": ag.get("payment_received_at"),
         "payment": pay[0] if pay else None,
     }
+
+
+def _oms_payment(lead_id: str) -> str:
+    """The payment status OMS reported for the deal's order; "pending" until it says otherwise."""
+    try:
+        rows = get_service_client().table("orders").select("*").eq("lead_id", lead_id).limit(1).execute().data
+    except Exception:  # noqa: BLE001 - the lead page must load whatever the orders table looks like
+        log.warning("could not read the order's payment status", exc_info=True)
+        return "pending"
+    return (rows[0] if rows else {}).get("oms_payment_status") or "pending"
 
 
 # --- prepare ---------------------------------------------------------------------------------------------------------
@@ -72,9 +92,13 @@ def save_details(user: Profile, lead_id: str, body: schemas.AgreementDetails) ->
     if lead["stage"] in CLOSED:
         raise AppError("This lead is closed.")
     _check_photo_paths(lead_id, body.packages)
+    _check_photo_paths(lead_id, [i for p in body.packages for i in p.items])
     packages = [
         {"name": p.name, "unit_price": float(p.unit_price), "quantity": float(p.quantity),
-         "items": [{"name": i.name, "description": i.description or None} for i in p.items], "photos": list(dict.fromkeys(p.photos))}
+         "items": [{"name": i.name, "description": i.description or None, "quantity_per_kit": i.quantity_per_kit,
+                    "is_packaging": i.is_packaging, "product_id": i.product_id or None, "photos": list(dict.fromkeys(i.photos)),
+                    **({} if i.unit_price is None else {"unit_price": float(i.unit_price)})}
+                   for i in p.items], "photos": list(dict.fromkeys(p.photos))}
         for p in body.packages
     ]
     totals = commercials(packages, body.transportation, body.gst_rate)
@@ -89,6 +113,17 @@ def save_details(user: Profile, lead_id: str, body: schemas.AgreementDetails) ->
     existing = get_service_client().table("agreements").select("*").eq("lead_id", lead_id).limit(1).execute().data
     before = existing[0] if existing else {}
     first = not before.get("details")
+    old = before.get("details") or {}
+    if body.handover is None:
+        delivery = old.get("handover")
+    else:
+        delivery = body.handover.model_dump(mode="json")
+        if delivery["advance_percent"] is not None:
+            delivery["advance_percent"] = float(delivery["advance_percent"])
+        for place in delivery["delivery_locations"]:
+            place["location_ref"] = place["location_ref"] or handover_rules.new_ref("LOC")  # the same place keeps it for good
+    if delivery:
+        details["handover"] = delivery
     status = terms_status_for(user, details["terms"], before)
     fields = {"details": details, "total_amount": totals["total"], "prepared_at": now_ist().isoformat(), "terms_status": status}
     if status == "pending":
@@ -111,6 +146,10 @@ def save_details(user: Profile, lead_id: str, body: schemas.AgreementDetails) ->
     if status == "pending" and before.get("terms_status") != "pending":
         for a in _approvers(lead.get("owner_id")):
             notify(a, f"terms:{lead_id}", "Agreement terms need approval", f"{lead['company']['name']}: custom contract terms", "/approvals")
+    try:  # an order already made from this deal follows the change, and its handover is approved again
+        handover.from_agreement_change(user, lead_id, old, details)
+    except Exception:  # noqa: BLE001 - the agreement is saved either way
+        log.exception("could not carry the agreement change into the OMS handover")
     # Preparing the agreement is the action that moves the lead to Agreement and Payment.
     leads.auto_advance(lead, "agreement_payment", user.id, "Agreement prepared")
     write_audit(user.id, "prepare", "agreements", lead_id, {"total": totals["total"]})
@@ -217,6 +256,26 @@ def mark_sent(user: Profile, lead_id: str) -> dict:
         raise AppError("This lead is closed.")
     _upsert(lead_id, sent_at=now_ist().isoformat())
     add_activity(lead_id, user.id, "agreement", outcome="sent", note="Agreement sent to the client")
+    return state(lead_id)
+
+
+def upload_signed(user: Profile, lead_id: str, data: bytes, filename: str | None) -> dict:
+    """The client's signed copy. It marks the agreement signed, which is what lets the OMS handover start."""
+    lead = leads.get_lead_row(user, lead_id)
+    if lead["stage"] == "closed_lost":
+        raise AppError("This lead is closed.")
+    rows = get_service_client().table("agreements").select("*").eq("lead_id", lead_id).limit(1).execute().data
+    terms = (rows[0] if rows else {}).get("terms_status")
+    if terms in ("pending", "rejected"):
+        raise ConflictError("The custom contract terms are not approved yet.")
+    mime, ext = checked_document(data, filename)
+    path = upload_document(lead_id, data, mime, ext)
+    name = (filename or f"signed-agreement.{ext}").strip()[:200] or f"signed-agreement.{ext}"
+    _upsert(lead_id, signed_at=now_ist().isoformat(), signed_path=path, signed_name=name)
+    add_activity(lead_id, user.id, "agreement", outcome="signed", note=f"Signed agreement uploaded: {name}")
+    if lead["stage"] not in CLOSED:
+        leads.auto_advance(lead, "agreement_payment", user.id, "Agreement signed")
+    write_audit(user.id, "sign", "agreements", lead_id, {"file": name})
     return state(lead_id)
 
 

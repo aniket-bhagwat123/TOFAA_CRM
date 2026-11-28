@@ -24,3 +24,4 @@ class TaskSnooze(CamelModel):
     due_at: datetime | None = None  # "In 2 hrs": the exact time; the other chips move only the day
     note: str | None = Field(default=None, max_length=500)  # required when the client asked for the callback
     reason: Literal["snooze", "reschedule"] = "snooze"  # reschedule: dragged to another column
+    exact: bool = False  # the person picked this date and time: keep it, working hours or not

@@ -62,8 +62,8 @@ export function CompanyDashboard({ d, admin }: { d: CompanyData; admin: boolean 
             </Section>
           )}
           {d.orders && (
-            <Section title="Orders by delivery step" icon={PackageCheck} href="/orders" linkLabel="Orders">
-              <Bars format={(n) => String(n)} empty="No orders yet." rows={ORDER_LABEL.map(([k, label]) => ({ key: k, label, value: d.orders![k] ?? 0 }))} />
+            <Section title="Deals by Order Status" icon={PackageCheck} href="/deals" linkLabel="Deals">
+              <Bars format={(n) => String(n)} empty="No deals yet." rows={ORDER_LABEL.map(([k, label]) => ({ key: k, label, value: d.orders![k] ?? 0 }))} />
             </Section>
           )}
         </div>

@@ -48,9 +48,9 @@ export function KamDashboard({ d }: { d: KamData }) {
           )}
         </Section>
 
-        <Section title="Orders of my accounts" icon={PackageCheck} href="/orders" linkLabel="Orders">
-          {!d.orders ? <Empty>Orders are not set up yet.</Empty> : (
-            <Bars format={(n) => String(n)} empty="No orders yet." rows={ORDER_LABEL.map(([k, label]) => ({ key: k, label, value: d.orders![k] ?? 0 }))} />
+        <Section title="Deals of my clients" icon={PackageCheck} href="/deals" linkLabel="Deals">
+          {!d.orders ? <Empty>Deals are not set up yet.</Empty> : (
+            <Bars format={(n) => String(n)} empty="No deals yet." rows={ORDER_LABEL.map(([k, label]) => ({ key: k, label, value: d.orders![k] ?? 0 }))} />
           )}
         </Section>
 

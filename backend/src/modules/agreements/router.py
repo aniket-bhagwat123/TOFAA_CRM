@@ -1,8 +1,10 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, File, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from pydantic import Field
 
+from src.core.documents import MAX_DOCUMENT_BYTES
 from src.core.schema import CamelModel, ok
 from src.modules.agreements import schemas, service
 from src.modules.auth.dependencies import CurrentUserDep
@@ -54,6 +56,12 @@ def agreement_pdf(lead_id: str, user: CurrentUserDep):
 @router.post("/{lead_id}/agreement/sent")
 def sent(lead_id: str, user: CurrentUserDep):
     return ok(service.mark_sent(user, lead_id), "Marked as sent.")
+
+
+@router.post("/{lead_id}/agreement/signed")
+async def signed(lead_id: str, user: CurrentUserDep, file: UploadFile = File(...)):
+    data = await file.read(MAX_DOCUMENT_BYTES + 1)
+    return ok(await run_in_threadpool(service.upload_signed, user, lead_id, data, file.filename), "Signed agreement saved.")
 
 
 @router.post("/{lead_id}/payment-request", status_code=201)

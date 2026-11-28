@@ -1,0 +1,1255 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "TOFAA CRM: OMS Handover API",
+    "description": "The OMS reads approved handovers and sends its stage back. See OMS_ORDER_API.md.",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/handovers": {
+      "get": {
+        "tags": [
+          "OMS handovers"
+        ],
+        "summary": "List handovers",
+        "description": "Approved (and later cancelled) handovers, oldest change first. Poll with `updated_since` set to the latest\n`updated_at` seen; a handover may then be repeated, which `handover_number` + `version` make harmless.",
+        "operationId": "list_handovers_api_v1_handovers_get",
+        "security": [
+          {
+            "OMS API key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "approved",
+                    "cancelled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Leave out when polling, so cancellations are not missed",
+              "title": "Status"
+            },
+            "description": "Leave out when polling, so cancellations are not missed"
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Changed at or after this time, e.g. 2027-01-01T00:00:00Z",
+              "title": "Updated Since"
+            },
+            "description": "Changed at or after this time, e.g. 2027-01-01T00:00:00Z"
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_HandoverPage_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong X-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The CRM database is not ready: retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{handover_number}": {
+      "get": {
+        "tags": [
+          "OMS handovers"
+        ],
+        "summary": "Read one handover",
+        "description": "The last approved version. While an edit waits for approval, the earlier version is returned.",
+        "operationId": "read_handover_api_v1_handovers__handover_number__get",
+        "security": [
+          {
+            "OMS API key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "handover_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Handover Number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Handover_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong X-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No approved handover has that number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The CRM database is not ready: retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{handover_number}/status": {
+      "post": {
+        "tags": [
+          "OMS handovers"
+        ],
+        "summary": "Send the OMS stage",
+        "description": "Records the OMS stage and shipments. Repeats and older messages (by `changed_at`) change nothing, the status\nnever moves backwards, and skipped stages are filled in.",
+        "operationId": "send_status_api_v1_handovers__handover_number__status_post",
+        "security": [
+          {
+            "OMS API key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "handover_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Handover Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_StatusResult_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong X-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No approved handover has that number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another oms_order_id is linked, or the order changed meanwhile: send again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The CRM database is not ready: retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/handovers/{handover_number}/payment": {
+      "post": {
+        "tags": [
+          "OMS handovers"
+        ],
+        "summary": "Send the payment status",
+        "description": "Whether the payment is pending or successful. The CRM only shows it. It may be sent before any stage: no OMS order\nis needed yet. Repeats and older messages (by `changed_at`) change nothing.",
+        "operationId": "send_payment_api_v1_handovers__handover_number__payment_post",
+        "security": [
+          {
+            "OMS API key": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "handover_number",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Handover Number"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PaymentUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_PaymentResult_"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or wrong X-API-Key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No approved handover has that number",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The order changed meanwhile: send again",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The CRM database is not ready: retry later",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Address": {
+        "properties": {
+          "line": {
+            "type": "string",
+            "title": "Line"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "title": "State"
+          },
+          "pincode": {
+            "type": "string",
+            "title": "Pincode",
+            "examples": [
+              "411001"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "line",
+          "city",
+          "state",
+          "pincode"
+        ],
+        "title": "Address"
+      },
+      "Client": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "company_name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Company Name"
+          },
+          "client_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Type",
+            "examples": [
+              "Key Account"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "company_name"
+        ],
+        "title": "Client"
+      },
+      "DeliveryLocation": {
+        "properties": {
+          "location_ref": {
+            "type": "string",
+            "title": "Location Ref",
+            "description": "CRM ID; send it back with shipments"
+          },
+          "address": {
+            "$ref": "#/components/schemas/Address"
+          },
+          "contact_name": {
+            "type": "string",
+            "title": "Contact Name"
+          },
+          "contact_phone": {
+            "type": "string",
+            "title": "Contact Phone"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity",
+            "description": "Kits for this location, when decided"
+          }
+        },
+        "type": "object",
+        "required": [
+          "location_ref",
+          "address",
+          "contact_name",
+          "contact_phone"
+        ],
+        "title": "DeliveryLocation"
+      },
+      "DesignBrief": {
+        "properties": {
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          },
+          "reference_file_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reference File Urls",
+            "description": "Signed links, valid for at least 10 minutes: download, do not store"
+          },
+          "logo_file_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Logo File Urls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reference_file_urls",
+          "logo_file_urls"
+        ],
+        "title": "DesignBrief"
+      },
+      "Envelope_HandoverPage_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/HandoverPage"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "OK"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[HandoverPage]"
+      },
+      "Envelope_Handover_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/Handover"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "OK"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[Handover]"
+      },
+      "Envelope_PaymentResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PaymentResult"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "OK"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[PaymentResult]"
+      },
+      "Envelope_StatusResult_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/StatusResult"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "OK"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "Envelope[StatusResult]"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data",
+            "description": "For 422: {errors: [{field, message}]}"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "title": "ErrorResponse"
+      },
+      "Handover": {
+        "properties": {
+          "handover_number": {
+            "type": "string",
+            "title": "Handover Number",
+            "description": "Unique, never reused. Use it to stop duplicates.",
+            "examples": [
+              "HO-2027-0001"
+            ]
+          },
+          "deal_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deal Number",
+            "examples": [
+              "DEAL-2027-0001"
+            ]
+          },
+          "deal_id": {
+            "type": "string",
+            "title": "Deal Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version",
+            "description": "+1 on every approved edit and on cancel"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "cancelled"
+            ],
+            "title": "Status"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "description": "UTC; poll with updated_since",
+            "examples": [
+              "2027-01-05T10:30:00Z"
+            ]
+          },
+          "client": {
+            "$ref": "#/components/schemas/Client"
+          },
+          "sales_owner": {
+            "$ref": "#/components/schemas/SalesOwner"
+          },
+          "campaign_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Campaign Name",
+            "examples": [
+              "Diwali 2027"
+            ]
+          },
+          "total_kits": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Total Kits"
+          },
+          "delivery_deadline": {
+            "type": "string",
+            "format": "date",
+            "title": "Delivery Deadline",
+            "description": "Requested date; OMS Ops confirms it (confirmed_delivery_deadline)"
+          },
+          "advance_percent": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Advance Percent",
+            "description": "Optional (null when not set). OMS shows it; Finance confirms payment in OMS"
+          },
+          "design_brief": {
+            "$ref": "#/components/schemas/DesignBrief"
+          },
+          "sample": {
+            "$ref": "#/components/schemas/Sample"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Item"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "delivery_locations": {
+            "items": {
+              "$ref": "#/components/schemas/DeliveryLocation"
+            },
+            "type": "array",
+            "title": "Delivery Locations"
+          },
+          "client_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Instructions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handover_number",
+          "deal_id",
+          "version",
+          "status",
+          "updated_at",
+          "client",
+          "sales_owner",
+          "total_kits",
+          "delivery_deadline",
+          "design_brief",
+          "sample",
+          "items",
+          "delivery_locations"
+        ],
+        "title": "Handover"
+      },
+      "HandoverPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Handover"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "page",
+          "limit",
+          "total"
+        ],
+        "title": "HandoverPage"
+      },
+      "Item": {
+        "properties": {
+          "item_ref": {
+            "type": "string",
+            "title": "Item Ref",
+            "description": "CRM line ID; stays the same across versions"
+          },
+          "product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Id",
+            "description": "Blank for custom items; OMS Procurement links it later"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "quantity_per_kit": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Quantity Per Kit"
+          },
+          "is_packaging": {
+            "type": "boolean",
+            "title": "Is Packaging"
+          },
+          "photo_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Photo Urls"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_ref",
+          "name",
+          "quantity_per_kit",
+          "is_packaging",
+          "photo_urls"
+        ],
+        "title": "Item"
+      },
+      "PaymentResult": {
+        "properties": {
+          "handover_number": {
+            "type": "string",
+            "title": "Handover Number"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied",
+            "description": "false: the message was not newer than the last one and changed nothing"
+          },
+          "payment_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "success"
+            ],
+            "title": "Payment Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handover_number",
+          "applied",
+          "payment_status"
+        ],
+        "title": "PaymentResult"
+      },
+      "PaymentUpdate": {
+        "properties": {
+          "payment_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "success"
+            ],
+            "title": "Payment Status",
+            "description": "What OMS Finance says about the payment"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At",
+            "description": "When it changed in OMS, with a time zone"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payment_status",
+          "changed_at"
+        ],
+        "title": "PaymentUpdate",
+        "examples": [
+          {
+            "changed_at": "2027-01-06T09:00:00Z",
+            "payment_status": "success"
+          }
+        ]
+      },
+      "SalesOwner": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "email"
+        ],
+        "title": "SalesOwner"
+      },
+      "Sample": {
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SampleApproval"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "null until the client approved the sample"
+          }
+        },
+        "type": "object",
+        "required": [
+          "required"
+        ],
+        "title": "Sample"
+      },
+      "SampleApproval": {
+        "properties": {
+          "approver_name": {
+            "type": "string",
+            "title": "Approver Name"
+          },
+          "approved_on": {
+            "type": "string",
+            "format": "date",
+            "title": "Approved On"
+          },
+          "evidence_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Url",
+            "description": "Signed link; null if the file could not be signed (read again)"
+          }
+        },
+        "type": "object",
+        "required": [
+          "approver_name",
+          "approved_on",
+          "evidence_url"
+        ],
+        "title": "SampleApproval"
+      },
+      "ShipmentIn": {
+        "properties": {
+          "location_ref": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Location Ref"
+          },
+          "kits": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 10000000.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kits",
+            "description": "Kits in this shipment; required when dispatching"
+          },
+          "transporter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transporter"
+          },
+          "tracking_number": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 200,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tracking Number",
+            "description": "Tells two shipments to one location apart"
+          },
+          "dispatched_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dispatched At",
+            "description": "Defaults to changed_at when stage is dispatched"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At",
+            "description": "Defaults to changed_at when stage is delivered"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "location_ref"
+        ],
+        "title": "ShipmentIn"
+      },
+      "StatusResult": {
+        "properties": {
+          "handover_number": {
+            "type": "string",
+            "title": "Handover Number"
+          },
+          "applied": {
+            "type": "boolean",
+            "title": "Applied",
+            "description": "false: the message was not newer than the last one and changed nothing"
+          },
+          "crm_status": {
+            "type": "string",
+            "title": "Crm Status",
+            "examples": [
+              "production"
+            ]
+          },
+          "oms_stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oms Stage"
+          },
+          "recorded_steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recorded Steps",
+            "description": "CRM statuses recorded by this message, oldest first"
+          }
+        },
+        "type": "object",
+        "required": [
+          "handover_number",
+          "applied",
+          "crm_status",
+          "oms_stage",
+          "recorded_steps"
+        ],
+        "title": "StatusResult"
+      },
+      "StatusUpdate": {
+        "properties": {
+          "oms_order_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Oms Order Id"
+          },
+          "oms_order_number": {
+            "type": "string",
+            "pattern": "^TOF-ORD-\\d{4}-\\d{5}$",
+            "title": "Oms Order Number",
+            "examples": [
+              "TOF-ORD-2027-00001"
+            ]
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "design_and_procurement",
+              "warehouse_ready",
+              "packing",
+              "dispatched",
+              "delivered",
+              "on_hold",
+              "cancelled"
+            ],
+            "title": "Stage"
+          },
+          "changed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Changed At",
+            "description": "When the change happened in OMS, with a time zone"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note",
+            "description": "Required for on_hold and cancelled"
+          },
+          "confirmed_delivery_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confirmed Delivery Deadline",
+            "description": "The date OMS Ops confirmed"
+          },
+          "locations": {
+            "items": {
+              "$ref": "#/components/schemas/ShipmentIn"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Locations",
+            "description": "For dispatched and delivered"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "oms_order_id",
+          "oms_order_number",
+          "stage",
+          "changed_at"
+        ],
+        "title": "StatusUpdate",
+        "examples": [
+          {
+            "changed_at": "2027-01-20T09:15:00Z",
+            "locations": [
+              {
+                "dispatched_at": "2027-01-20T09:00:00Z",
+                "kits": 60,
+                "location_ref": "LOC-1a2b3c4d5e",
+                "tracking_number": "BD123",
+                "transporter": "BlueDart"
+              }
+            ],
+            "note": "First lot",
+            "oms_order_id": "6f1c2a",
+            "oms_order_number": "TOF-ORD-2027-00001",
+            "stage": "dispatched"
+          }
+        ]
+      }
+    },
+    "securitySchemes": {
+      "OMS API key": {
+        "type": "apiKey",
+        "description": "The OMS key (OMS_INBOUND_KEY).",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    }
+  }
+}

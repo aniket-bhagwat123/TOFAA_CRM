@@ -153,7 +153,8 @@ def finish_task(lead_id: str, task_id: str, outcome: str) -> None:
 REPEAT_LIMIT = 3  # snoozes before the follow-up is flagged "Repeatedly postponed" to the manager
 
 
-def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None, note: str | None, reason: str = "snooze") -> dict:
+def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None, note: str | None, reason: str = "snooze",
+                exact: bool = False) -> dict:
     """Push a follow-up to later (Snooze), or move it to another day (dragged to another column: "reschedule").
     A callback the client asked for needs a note. Every move to a later time counts; the third tells the manager."""
     from src.modules.notifications.service import notify  # local: keeps the import graph flat
@@ -173,11 +174,13 @@ def snooze_task(user: Profile, task_id: str, due: date, due_at: datetime | None,
         errors.append({"field": "note", "message": "The client asked for this callback. Add a note on why it moves."})
     if due < today_ist():
         errors.append({"field": "dueDate", "message": "Pick today or a later date."})
+    elif exact and due_at and (due_at if due_at.tzinfo else due_at.replace(tzinfo=IST)) <= now_ist():
+        errors.append({"field": "dueTime", "message": "Pick a time later than now."})
     if errors:
         raise AppError("Some details are missing.", {"errors": errors}, 422)
     # A moved card stays on the day and time the user picked, weekend or holiday included. A snooze ("In 2 hrs" late
     # in the day) still lands on the next working morning.
-    if not (reason == "reschedule" and due_at):
+    if not ((exact or reason == "reschedule") and due_at):
         due, due_at = with_time(due, due_at)
 
     old_at = task.get("due_at") or f"{task['due_date']}T23:59:59+05:30"

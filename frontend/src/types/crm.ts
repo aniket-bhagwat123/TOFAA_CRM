@@ -136,7 +136,7 @@ export type AssignableUser = { id: string; fullName: string | null; role: string
 export type QuotationItem = { id?: string; description: string; quantity: number; unitPrice: number };
 /** A photo stored on the server: `path` is what gets saved with the quotation, `url` is a short-lived preview link. */
 export type QuotationPhoto = { path: string; url?: string | null };
-export type PackageItem = { name: string; description?: string | null };
+export type PackageItem = { name: string; description?: string | null; unitPrice?: number | null };
 /** A client requirement inside a quotation: priced as rate per unit x quantity, with its items and mockup photos. */
 export type QuotationPackage = { id?: string; name: string; unitPrice: number; quantity: number; items: PackageItem[]; photos: QuotationPhoto[] };
 export type QuotationStatus = "ready" | "pending_approval" | "approved" | "rejected" | "sent";
@@ -169,6 +169,13 @@ export type AgreementDetails = {
   packages: { name: string; unitPrice: number; quantity: number; items: PackageItem[]; photos: QuotationPhoto[] }[];
   scope: string[]; scopeOther?: string | null; transportation: number; gstRate: number; terms: AgreementTerm[];
   tofaaSignee?: string | null; clientSignee?: string | null; remarks?: string | null; totals?: AgreementTotals;
+  handover?: AgreementDeliveryDetails | null;
+};
+/** Delivery details taken with the agreement and carried into the OMS handover. */
+export type AgreementDeliveryDetails = {
+  expectedDelivery?: string | null; advancePercent?: number | null; campaignName?: string | null; clientType?: string | null;
+  instructions?: string | null; designBrief?: string | null; sampleRequired?: boolean | null;
+  deliveryLocations?: import("./orders").HandoverLocation[];
 };
 export type AgreementState = {
   details?: AgreementDetails | null; totalAmount?: number | null; preparedAt?: string | null;
@@ -176,7 +183,7 @@ export type AgreementState = {
   options?: { scope: { value: string; label: string }[]; gstRates: number[]; defaultTerms: AgreementTerm[] };
   sentAt?: string | null; signedAt?: string | null; signedName?: string | null; signedUrl?: string | null;
   invoiceNumber?: string | null; invoiceRaisedAt?: string | null; paymentReceivedAt?: string | null;
-  payment?: PaymentRequest | null;
+  payment?: PaymentRequest | null; omsPaymentStatus?: "pending" | "success";
 };
 export type DealData = {
   value: { amount: number | null; source: string | null; estimate?: number | null; quoted?: number | null; paid?: number | null };

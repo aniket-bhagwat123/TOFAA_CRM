@@ -42,7 +42,7 @@ export function activityTitle(a: Activity): string {
     case "client": return a.outcome === "converted" ? "Became a client" : a.outcome === "project" ? "New project" : a.outcome === "occasion" ? "Occasion added" : a.outcome === "contact" ? "Contact added" : "Client";
     case "campaign": return "Campaign";
     case "sample": return "Samples sent";
-    case "order": return `Order: ${({ production: "Production", quality_check: "Quality check", dispatched: "Dispatched", delivered: "Delivered" } as Record<string, string>)[a.outcome ?? ""] ?? "updated"}`;
+    case "order": return `Deal: ${({ production: "Production", quality_check: "Quality check", dispatched: "Dispatched", delivered: "Delivered" } as Record<string, string>)[a.outcome ?? ""] ?? "updated"}`;
     default: return "Imported";
   }
 }

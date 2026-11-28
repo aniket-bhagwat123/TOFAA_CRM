@@ -25,7 +25,7 @@ const TITLES: [string, string][] = [
   ["/activity", "Activity"],
   ["/dashboard", "Dashboard"],
   ["/quotations", "Quotations"],
-  ["/orders", "Orders"],
+  ["/deals", "Deals"],
   ["/approvals", "Approvals"],
   ["/reports", "Reports"],
   ["/my-target", "My Target"],
@@ -53,6 +53,12 @@ export function Topbar({ user }: { user: Profile }) {
         <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-2 text-base">
           <Link href={crumb.parent.href} className="shrink-0 font-medium text-slate-500 hover:text-brand">{crumb.parent.label}</Link>
           <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+          {crumb.middle && (
+            <>
+              <Link href={crumb.middle.href} className="truncate font-medium text-slate-500 hover:text-brand">{crumb.middle.label}</Link>
+              <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+            </>
+          )}
           <span className="truncate font-semibold tracking-tight text-slate-900" aria-current="page">{crumb.label}</span>
         </nav>
       ) : (

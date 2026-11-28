@@ -21,7 +21,7 @@ from src.modules.notifications.service import notify
 from src.modules.orders import rules
 
 log = logging.getLogger(__name__)
-NOT_READY = "Order management is not set up yet. An admin needs to apply the database migration 20261129100000_order_flow.sql, then try again."
+NOT_READY = "Deal management is not set up yet. An admin needs to apply the database migration 20261129100000_order_flow.sql, then try again."
 NOWHERE = "00000000-0000-0000-0000-000000000000"
 SELECT = (
     "*, company:companies(id,name,city,account_owner_id), owner:profiles!owner_id(id,full_name),"
@@ -54,7 +54,8 @@ def require_upgraded() -> None:
 
 def _item(name, quantity, unit_price, details=None, photos=None) -> dict:
     return {"name": str(name)[:200], "quantity": float(quantity), "unit_price": float(unit_price),
-            "details": [{"name": d.get("name"), "description": d.get("description")} for d in details or [] if d.get("name")],
+            "details": [{"name": d.get("name"), "description": d.get("description"),
+                         **{k: d[k] for k in ("unit_price", "quantity_per_kit") if d.get(k) is not None}} for d in details or [] if d.get("name")],
             "photos": [p for p in photos or [] if p]}
 
 
@@ -90,6 +91,23 @@ def _stored_money(items: list[dict], transportation, gst_rate) -> dict:
     sums = rules.money(items, transportation, gst_rate)
     return {"items": items, "transportation": sums["transportation"], "gst_rate": sums["gst_rate"],
             "subtotal": sums["subtotal"], "gst_amount": sums["gst_amount"], "total": sums["total"]}
+
+
+def keep_item_prices(before: list[dict], after: list[dict]) -> list[dict]:
+    """The edit form does not ask item prices: they stay while the requirement's rate is unchanged. A new rate is one
+    price for the requirement, so its item prices are dropped."""
+    old = {i["name"]: i for i in before}
+    out = []
+    for item in after:
+        was = old.get(item["name"])
+        if was and float(was["unit_price"]) == float(item["unit_price"]):
+            known = {d["name"]: d for d in was.get("details") or []}
+            item = {**item, "details": [{**known.get(d["name"], {}), **{k: v for k, v in d.items() if v is not None or k == "description"}}
+                                        for d in item.get("details") or []]}
+        else:
+            item = {**item, "details": [{"name": d["name"], "description": d.get("description")} for d in item.get("details") or []]}
+        out.append(item)
+    return out
 
 
 def snapshot(order: dict) -> dict:
@@ -160,12 +178,12 @@ def load(user: Profile, order_id: str) -> dict:
         rows = q.select(SELECT if upgraded() else "*, company:companies(id,name,city,account_owner_id), lead:leads(id,owner_id,pipeline,contact:contacts(id,name,designation,phone,email,photo_path),owner:profiles!owner_id(id,full_name))").eq("id", order_id).limit(1).execute().data
     except Exception as exc:  # noqa: BLE001 - not an id
         if "22P02" in str(exc):
-            raise NotFoundError("Order not found.") from exc
+            raise NotFoundError("Deal not found.") from exc
         raise
     if not rows or rows[0].get("deleted_at"):
-        raise NotFoundError("Order not found. It may have been deleted.")
+        raise NotFoundError("Deal not found. It may have been deleted.")
     if not can_see(user, rows[0]):
-        raise ForbiddenError("This order is for another account.")
+        raise ForbiddenError("This deal is for another client.")
     return rows[0]
 
 
@@ -183,7 +201,8 @@ def row(order: dict, photo_urls: dict[str, str]) -> dict:
     return {
         "id": order.get("lead_id") or order["id"], "order_id": order["id"], "lead_id": order.get("lead_id"),
         "pipeline": (order.get("lead") or {}).get("pipeline"), "source": order.get("source") or "payment",
-        "order_number": order["order_number"], "order_amount": order.get("total") or order.get("amount"),
+        "order_number": rules.number(order), "order_amount": order.get("total") or order.get("amount"),
+        "handover_number": order.get("handover_number"), "oms_order_number": order.get("oms_order_number"),
         "company": {"id": company.get("id"), "name": company.get("name") or "Client removed"},
         "contact": {"name": (contact or {}).get("name") or order.get("receiver_name") or "", "photo_url": photo_urls.get((contact or {}).get("photo_path") or "")},
         "owner": owner, "delivery_status": None if order["status"] == "new" else order["status"],
@@ -223,7 +242,9 @@ def list_orders(user: Profile, page: PageParams, *, status: str | None = None, o
                     clauses.append(f"id.in.({','.join(r['id'] for r in matched)})")
             safe = "".join(ch for ch in term if ch.isalnum() or ch == "-")
             if safe:
-                clauses.append(f"order_number.ilike.%{safe}%")
+                clauses.append(f"order_number.ilike.%{safe}%")  # also finds a Legacy ID
+                if _numbered():
+                    clauses += [f"{column}.ilike.%{safe}%" for column in ("deal_number", "handover_number", "oms_order_number")]
             # A second "or" narrows the first (the access rule above stays in force).
             q = q.or_(",".join(clauses)) if clauses else q.eq("id", NOWHERE)
         res = q.order("created_at", desc=True).range(page.start, page.end).execute()
@@ -263,9 +284,15 @@ def detail(user: Profile, order_id: str) -> dict:
     company = order.get("company") or {}
     status = order["status"]
     moves = rules.crm_moves(status) if ready else [s for s in ("production", "quality_check", "dispatched", "delivered") if s != status]
+    live_handover = ready and _handover_live()
+    handed = ready and _handover_order(order)
+    published = bool(order.get("published"))
+    if live_handover:  # the status comes from OMS: nothing is moved by hand
+        moves = []
     paid = sum(float(p.get("amount_paid") or 0) for p in payments)
     return {
-        "id": order["id"], "order_number": order["order_number"], "status": status, "source": order.get("source") or "payment",
+        "id": order["id"], "order_number": rules.number(order), "legacy_id": order.get("legacy_id"),
+        "handover_number": order.get("handover_number"), "oms_order_number": order.get("oms_order_number"), "status": status, "source": order.get("source") or "payment",
         "created_at": order.get("created_at"), "status_updated_at": order.get("status_updated_at"), "delivered_at": order.get("delivered_at"),
         "released_at": order.get("released_at"),
         "lead_id": order.get("lead_id"), "pipeline": (order.get("lead") or {}).get("pipeline"),
@@ -277,11 +304,13 @@ def detail(user: Profile, order_id: str) -> dict:
         **{k: sums[k] for k in ("units", "subtotal", "transportation", "gst_rate", "gst_amount", "total")},
         "agreed_amount": order.get("amount"), "paid_amount": paid, "balance": max(0.0, round(sums["total"] - paid, 2)) if payments else None,
         "payments": payments, "history": history,
-        "managed": ready, "moves": moves,
-        "missing": rules.missing_for_release(order) if ready else [],
+        "managed": ready, "moves": moves, "handover": handed,
+        "handover_status": (order.get("handover_status") or "draft") if handed else None,
+        "payment_status": order.get("oms_payment_status") or "pending",  # reported by OMS
+        "missing": rules.missing_for_release(order) if ready and not live_handover else [],
         "can_edit_items": ready and status not in rules.ITEMS_LOCKED,
         "can_edit_delivery": ready and status not in rules.DELIVERY_LOCKED,
-        "can_delete": ready and status in rules.DELETABLE,
+        "can_delete": ready and status in rules.DELETABLE and not published,
     }
 
 
@@ -297,10 +326,10 @@ def _record(order: dict, to: str, actor_id: str | None, actor_name: str | None, 
     if order.get("lead_id"):
         try:
             add_activity(order["lead_id"], actor_id, "order", outcome=to,
-                         note=f"Order {order['order_number']}: {rules.LABEL.get(order.get('status'), order.get('status'))} -> {rules.LABEL[to]}",
+                         note=f"Deal {rules.number(order)}: {rules.LABEL.get(order.get('status'), order.get('status'))} -> {rules.LABEL[to]}",
                          meta={"orderId": order["id"], "from": order.get("status"), "to": to})
         except Exception:  # noqa: BLE001 - the order itself is saved either way
-            log.warning("could not add the order timeline entry", exc_info=True)
+            log.warning("could not add the deal timeline entry", exc_info=True)
 
 
 def move(order: dict, status: str, *, actor_id: str | None, actor_name: str | None = None, note: str | None = None,
@@ -310,23 +339,43 @@ def move(order: dict, status: str, *, actor_id: str | None, actor_name: str | No
     patch = {**rules.status_patch(order, status, now), **(extra or {})}
     done = get_service_client().table("orders").update(patch).eq("id", order["id"]).eq("status", order["status"]).execute().data
     if not done:
-        raise ConflictError("This order changed just now. Refresh and try again.")
+        raise ConflictError("This deal changed just now. Refresh and try again.")
     _record(order, status, actor_id, actor_name, note)
     write_audit(actor_id or "", "order_status", "orders", order["id"], {"from": order["status"], "to": status, "by": actor_name})
     cache.clear()
 
 
+def _numbered() -> bool:
+    from src.modules.orders import handover  # local import: handover imports this module
+
+    return handover.numbered()
+
+
+def _handover_live() -> bool:
+    """True once the database has the OMS handover: from then on only an approval releases an order to OMS."""
+    from src.modules.orders import handover  # local import: handover imports this module
+
+    return handover.ready()
+
+
+def _handover_order(order: dict) -> bool:
+    """True for an order that reaches OMS through an approved handover (one from a deal)."""
+    return bool(order.get("lead_id")) and order.get("source") != "manual" and _handover_live()
+
+
 def set_status(user: Profile, order_id: str, status: str, note: str | None) -> dict:
     require_upgraded()
+    if _handover_live():
+        raise ConflictError("The status comes from the OMS. To stop a deal, cancel its handover.")
     order = snapshot(load(user, order_id))
     if status == order["status"]:
         return detail(user, order_id)
     if status not in rules.crm_moves(order["status"]):
-        raise ConflictError(f"A {rules.LABEL[order['status']].lower()} order cannot move to {rules.LABEL.get(status, status)}.")
+        raise ConflictError(f"A {rules.LABEL[order['status']].lower()} deal cannot move to {rules.LABEL.get(status, status)}.")
     if status == "ready":
         missing = rules.missing_for_release(order)
         if missing:
-            raise AppError(f"Add {', '.join(missing)} before releasing this order to OMS.", status_code=422)
+            raise AppError(f"Add {', '.join(missing)} before releasing this deal to OMS.", status_code=422)
     if status in ("cancelled", "on_hold", "rejected") and not (note or "").strip():
         raise AppError("Add a short note saying why.", status_code=422)
     move(order, status, actor_id=user.id, note=note)
@@ -338,7 +387,7 @@ def _company(user: Profile, company_id: str) -> dict:
     if not rows or not rows[0].get("client_since"):
         raise NotFoundError("Client not found.")
     if user.role == Role.KAM and rows[0].get("account_owner_id") != user.id:
-        raise ForbiddenError("You can create orders for your own clients only.")
+        raise ForbiddenError("You can create deals for your own clients only.")
     return rows[0]
 
 
@@ -346,12 +395,14 @@ def create(user: Profile, company_id: str, items: list[dict], transportation, gs
     """An order made by hand (a client order that did not come through a deal)."""
     require_upgraded()
     require_lead_role(user)
+    if _handover_live():
+        raise ConflictError("Deals come from leads: they can't be created by hand.")
     company = _company(user, company_id)
     values = {"company_id": company_id, "source": "manual", "owner_id": company.get("account_owner_id") or user.id,
               **_stored_money(items, transportation, gst_rate), **{k: details.get(k) for k in DETAIL_FIELDS}}
     values["amount"] = values["total"]
     made = get_service_client().table("orders").insert(values).execute().data[0]
-    _record({**made, "status": None}, "new", user.id, None, "Order created")
+    _record({**made, "status": None}, "new", user.id, None, "Deal created")
     write_audit(user.id, "create", "orders", made["id"], {"client": company["name"], "total": values["total"]})
     cache.clear()
     return detail(user, made["id"])
@@ -363,23 +414,29 @@ def update(user: Profile, order_id: str, changes: dict) -> dict:
     status = order["status"]
     patch = {k: v for k, v in changes.items() if k in (*DETAIL_FIELDS, *SHIPMENT_FIELDS) and v != order.get(k)}
     if any(k in patch for k in DETAIL_FIELDS if k != "notes") and status in rules.DELIVERY_LOCKED:
-        raise ConflictError(f"A {rules.LABEL[status].lower()} order's delivery details can no longer change.")
+        raise ConflictError(f"A {rules.LABEL[status].lower()} deal's delivery details can no longer change.")
     money_keys = [k for k in ("items", "transportation", "gst_rate") if k in changes]
     if money_keys:
         items = changes.get("items", order.get("items") or [])
         # Photos come from the deal and are not typed in: keep them for items that keep their name.
         photos = {i["name"]: i.get("photos") or [] for i in order.get("items") or []}
         items = [{**i, "photos": photos.get(i["name"], [])} for i in items]
+        items = keep_item_prices(order.get("items") or [], items)
         new = _stored_money(items, changes.get("transportation", order.get("transportation")), changes.get("gst_rate", order.get("gst_rate")))
         different = any(rules.money(new["items"], new["transportation"], new["gst_rate"])[k] != _totals(order)[k] for k in ("lines", "total"))
         if different:
             if status in rules.ITEMS_LOCKED:
-                raise ConflictError("Items and prices are locked once OMS is working on the order.")
+                raise ConflictError("Items and prices are locked once OMS is working on them.")
             if not items:
-                raise AppError("An order needs at least one item.", status_code=422)
+                raise AppError("A deal needs at least one item.", status_code=422)
             patch.update(new)
     if not patch:
         return detail(user, order_id)
+    # What OMS reads changed: the handover must be approved again (OMS keeps the last approved version meanwhile).
+    if order.get("handover_status") in ("pending_approval", "approved") and {"expected_delivery", "instructions"} & set(patch):
+        patch["handover_status"] = "draft"
+    if order.get("published") and "oms_reference" in patch:
+        raise ConflictError("The OMS reference is set by OMS.")
     patch["updated_at"] = now_ist().isoformat()
     get_service_client().table("orders").update(patch).eq("id", order_id).execute()
     write_audit(user.id, "update", "orders", order_id, {"fields": sorted(patch)})
@@ -391,8 +448,10 @@ def delete(user: Profile, order_id: str) -> dict:
     """Hidden everywhere, kept in the database. The deal and its payment are not touched."""
     require_upgraded()
     order = load(user, order_id)
+    if order.get("published"):
+        raise ConflictError("OMS has this handover, so the deal can't be deleted. Cancel the handover instead.")
     if order["status"] not in rules.DELETABLE:
-        raise ConflictError("Cancel this order first: it is already being fulfilled.")
+        raise ConflictError("Cancel this deal first: it is already being fulfilled.")
     now = now_ist().isoformat()
     get_service_client().table("orders").update({"deleted_at": now, "deleted_by": user.id, "updated_at": now}).eq("id", order_id).execute()
     write_audit(user.id, "delete", "orders", order_id, {"orderNumber": order["order_number"]})
@@ -404,5 +463,5 @@ def tell_owner(order: dict, status: str, note: str | None) -> None:
     owner = order.get("owner_id") or (order.get("lead") or {}).get("owner_id")
     if owner:
         company = (order.get("company") or {}).get("name") or "A client"
-        notify(owner, f"order:{order['id']}:{status}:{now_ist().date()}", f"Order {order['order_number']}: {rules.LABEL[status]}",
-               f"{company}" + (f": {note}" if note else ""), f"/orders/{order['id']}")
+        notify(owner, f"order:{order['id']}:{status}:{now_ist().date()}", f"Deal {rules.number(order)}: {rules.LABEL[status]}",
+               f"{company}" + (f": {note}" if note else ""), f"/deals/{order['id']}")

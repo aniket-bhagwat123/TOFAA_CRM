@@ -2,7 +2,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import Field, StringConstraints
+from pydantic import Field, StringConstraints, model_validator
 
 from src.core.schema import CamelModel
 
@@ -14,6 +14,8 @@ class PackageItemIn(CamelModel):
     """One gifting item inside a requirement package. Not priced on its own: the package carries the price."""
     name: Name
     description: Detail | None = None
+    # Only when items are priced one by one: the rate of one piece. Empty on every item = one price for the requirement.
+    unit_price: Decimal | None = Field(default=None, ge=0, le=Decimal("10000000000"))
 
 
 class PackageIn(CamelModel):
@@ -23,6 +25,17 @@ class PackageIn(CamelModel):
     quantity: Decimal = Field(gt=0, le=10_000_000)
     items: list[PackageItemIn] = Field(default_factory=list, max_length=50)
     photos: list[str] = Field(default_factory=list, max_length=10)  # storage paths from POST /leads/{id}/quotation-photos
+
+    @model_validator(mode="after")
+    def _item_prices(self):
+        """Items are priced all or none. When priced, the requirement's rate is what one set of them costs."""
+        priced = [i for i in self.items if i.unit_price is not None]
+        if not priced:
+            return self
+        if len(priced) != len(self.items):
+            raise ValueError("Give every item a rate, or none of them.")
+        self.unit_price = sum((i.unit_price * (getattr(i, "quantity_per_kit", None) or 1) for i in self.items), Decimal("0"))
+        return self
 
 
 class QuotationCreate(CamelModel):

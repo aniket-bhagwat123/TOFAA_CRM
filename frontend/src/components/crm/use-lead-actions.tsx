@@ -11,7 +11,6 @@ import { leadTarget } from "./lead-card";
 import { MeetingSheet } from "./meeting-sheet";
 import { MinutesSheet } from "./minutes-sheet";
 import { NumberPickerSheet } from "./number-picker-sheet";
-import { PaymentRequestSheet } from "./payment-request-sheet";
 import { QuickLogSheet } from "./quick-log-sheet";
 import { QuotationSheet } from "./quotation-sheet";
 import { ReassignSheet } from "./reassign-sheet";
@@ -25,7 +24,7 @@ import { WhatsAppSheet } from "./whatsapp-sheet";
 type CallTarget = LeadTarget;
 
 /**
- * One place that owns every action sheet (call, WhatsApp, meeting, minutes, quotation, agreement, payment, stage,
+ * One place that owns every action sheet (call, WhatsApp, meeting, minutes, quotation, agreement, stage,
  * reassign, complete). Screens call `actions.call(target)` etc. and render `actions.sheets` once, so the same
  * actions work from the lead card, the pipeline board and the Today screen.
  */
@@ -46,7 +45,6 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
   const [sending, setSending] = useState<{ target: LeadTarget; quotation: Quotation } | null>(null);
   const [agreement, setAgreement] = useState<LeadTarget | null>(null);
   const [sampling, setSampling] = useState<LeadTarget | null>(null);
-  const [payment, setPayment] = useState<{ target: LeadTarget; amount?: number | null } | null>(null);
 
   const dial = useCallback((t: CallTarget, phone?: string | null) => {
     // Dial first; the outcome sheet is waiting when the KAM comes back from the call.
@@ -95,7 +93,6 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
       <SendQuotationSheet target={sending?.target ?? null} quotation={sending?.quotation ?? null} onClose={() => setSending(null)} onDone={onChange} />
       <SamplingSheet target={sampling} onClose={() => setSampling(null)} onDone={onChange} />
       <AgreementSheet target={agreement} onClose={() => setAgreement(null)} onDone={onChange} />
-      <PaymentRequestSheet target={payment?.target ?? null} suggestedAmount={payment?.amount} onClose={() => setPayment(null)} onDone={onChange} />
       <StageSheet target={stage?.target ?? null} stage={stage?.stage ?? null} reopen={!!stage?.reopen} lostReasons={meta.data?.lostReasons ?? []} onClose={() => setStage(null)} onDone={onChange} />
       <ReassignSheet target={reassign} currentOwnerId={ownerId} onClose={() => setReassign(null)} onDone={onChange} />
       <CloseLeadSheet target={closing} canMarkWon={false} onClose={() => setClosing(null)} onWon={() => undefined} onLost={(t) => setStage({ target: t, stage: "closed_lost" })} />
@@ -116,6 +113,6 @@ export function useLeadActions(onChange: () => void, ownerId?: string | null) {
     meta: meta.data, call: startCall, logCall: setCall, whatsapp: setWa, meeting: setMeeting, moveTo, reassign: setReassign, close: setClosing, remove: setRemoving,
     complete: setComplete, schedule: setSchedule, minutes: setMinutes, quotation: setQuotation,
     send: (target: LeadTarget, q: Quotation) => setSending({ target, quotation: q }),
-    agreement: setAgreement, sampling: setSampling, payment: (target: LeadTarget, amount?: number | null) => setPayment({ target, amount }), sheets,
+    agreement: setAgreement, sampling: setSampling, sheets,
   };
 }

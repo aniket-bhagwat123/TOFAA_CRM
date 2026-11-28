@@ -6,6 +6,7 @@ import { VoiceTextarea } from "@/components/crm/voice-textarea";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Sheet } from "@/components/ui/sheet";
+import { TimePicker } from "@/components/ui/time-picker";
 import { fieldErrors } from "@/lib/api-errors";
 import { formatDate, formatTime, istInputToIso, todayIso } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -21,7 +22,7 @@ const CHOICES: { key: Choice; label: string }[] = [
   { key: "tomorrow", label: "Tomorrow" },
   { key: "3d", label: "In 3 days" },
   { key: "week", label: "Next week" },
-  { key: "pick", label: "Pick date" },
+  { key: "pick", label: "Pick date & time" },
 ];
 /** When a day snooze rings: the follow-up's own time of day, else the start of the morning. */
 const DEFAULT_REMINDER = "10:00";
@@ -34,12 +35,13 @@ type Props = { item: FollowUpItem | null; onClose: () => void; onDone: () => voi
 export function SnoozeSheet({ item, onClose, onDone }: Props) {
   const [choice, setChoice] = useState<Choice | null>(null);
   const [picked, setPicked] = useState(todayIso(1));
+  const [time, setTime] = useState(DEFAULT_REMINDER);
   const [note, setNote] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (item) { setChoice(null); setPicked(todayIso(1)); setNote(""); setErrors({}); }
+    if (item) { setChoice(null); setPicked(todayIso(1)); setTime(item.dueAt ? hhmm(item.dueAt) : DEFAULT_REMINDER); setNote(""); setErrors({}); }
   }, [item]);
 
   const requested = !!item?.clientRequested;
@@ -48,7 +50,7 @@ export function SnoozeSheet({ item, onClose, onDone }: Props) {
   const count = item?.snoozeCount ?? 0;
   const name = item ? (item.projectTitle ? `${item.companyName} · ${item.projectTitle}` : item.companyName) : "";
 
-  /** Two taps: the snooze icon, then a chip. Only "Pick date" (and a callback the client asked for, which needs a note) wait for the button. */
+  /** Two taps: the snooze icon, then a chip. Only "Pick date & time" (and a callback the client asked for, which needs a note) wait for the button. */
   function tap(c: Choice) {
     setChoice(c);
     setErrors({});
@@ -62,6 +64,8 @@ export function SnoozeSheet({ item, onClose, onDone }: Props) {
     const e: Record<string, string> = {};
     if (!choice) e.choice = "Pick when to come back to it";
     if (choice === "pick" && !picked) e.dueDate = "Pick a date";
+    if (choice === "pick" && !time) e.dueTime = "Pick a time";
+    else if (choice === "pick" && picked && new Date(istInputToIso(`${picked}T${time}`)).getTime() <= Date.now()) e.dueTime = "Pick a time later than now.";
     if (requested && !note.trim()) e.note = "The client asked for this callback. Add a note on why it moves.";
     if (Object.keys(e).length) return setErrors(e);
 
@@ -72,11 +76,11 @@ export function SnoozeSheet({ item, onClose, onDone }: Props) {
     else if (choice === "3d") dueDate = todayIso(3);
     else if (choice === "week") dueDate = todayIso(7);
     // A day snooze still gets a reminder time, so it rings: the follow-up's own time, or 10:00 AM.
-    if (choice !== "2h") dueAt = istInputToIso(`${dueDate}T${reminderTime}`);
+    if (choice !== "2h") dueAt = istInputToIso(`${dueDate}T${choice === "pick" ? time : reminderTime}`);
 
     setBusy(true);
     try {
-      const res = await apiClient.post<{ snoozeCount: number; dueDate: string; dueAt: string | null }>(`/tasks/${item.id}/snooze`, { dueDate, dueAt, note: note.trim() || null });
+      const res = await apiClient.post<{ snoozeCount: number; dueDate: string; dueAt: string | null }>(`/tasks/${item.id}/snooze`, { dueDate, dueAt, note: note.trim() || null, exact: choice === "pick" });
       const n = res.data.snoozeCount;
       // Outside working hours the server moves it to the next working morning: say where it went.
       const where = res.data.dueAt ? `${formatDate(res.data.dueAt)}, ${formatTime(res.data.dueAt).toUpperCase()}` : formatDate(res.data.dueDate);
@@ -119,7 +123,12 @@ export function SnoozeSheet({ item, onClose, onDone }: Props) {
           </div>
           {errors.choice && <p role="alert" className="mt-1.5 text-xs font-medium text-red-600">{errors.choice}</p>}
         </div>
-        {choice === "pick" && <DatePicker label="Date" required min={todayIso()} value={picked} onChange={(d) => { setPicked(d); setErrors((x) => ({ ...x, dueDate: "" })); }} error={errors.dueDate} />}
+        {choice === "pick" && (
+          <div className="grid items-start gap-3 sm:grid-cols-2">
+            <DatePicker label="Date" required min={todayIso()} value={picked} onChange={(d) => { setPicked(d); setErrors((x) => ({ ...x, dueDate: "", dueTime: "" })); }} error={errors.dueDate} />
+            <TimePicker label="Time" required value={time} onChange={(v) => { setTime(v); setErrors((x) => ({ ...x, dueTime: "" })); }} error={errors.dueTime} />
+          </div>
+        )}
         {choice === "pick" && <Button onClick={() => void save(choice)} loading={busy} className="w-full">Snooze</Button>}
         {choice !== "pick" && <p className="text-center text-xs text-slate-400">{busy ? "Snoozing…" : `Tap a time to snooze. It rings as a reminder (day choices at ${reminderLabel}); outside working hours it moves to the next working morning.`}</p>}
       </div>

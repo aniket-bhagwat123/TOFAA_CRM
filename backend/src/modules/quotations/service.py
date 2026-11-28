@@ -100,7 +100,8 @@ def _check_photo_paths(lead_id: str, packages: list[schemas.PackageIn]) -> None:
 def _package_row(quotation_id: str, position: int, p: schemas.PackageIn) -> dict:
     return {
         "quotation_id": quotation_id, "position": position, "name": p.name, "unit_price": float(p.unit_price), "quantity": float(p.quantity),
-        "items": [{"name": i.name, "description": i.description or None} for i in p.items], "photo_paths": list(dict.fromkeys(p.photos)),
+        "items": [{"name": i.name, "description": i.description or None, **({} if i.unit_price is None else {"unit_price": float(i.unit_price)})}
+                  for i in p.items], "photo_paths": list(dict.fromkeys(p.photos)),
     }
 
 
@@ -160,7 +161,7 @@ def copy_packages(quotation_id: str, to_lead_id: str) -> list[schemas.PackageIn]
         photos = [x for x in (copy(path) for path in (p.get("photo_paths") or [])) if x]
         out.append(schemas.PackageIn(
             name=p["name"], unit_price=Decimal(str(p["unit_price"])), quantity=Decimal(str(p["quantity"])),
-            items=[schemas.PackageItemIn(name=i["name"], description=i.get("description")) for i in (p.get("items") or [])], photos=photos,
+            items=[schemas.PackageItemIn(name=i["name"], description=i.get("description"), unit_price=i.get("unit_price")) for i in (p.get("items") or [])], photos=photos,
         ))
     return out
 

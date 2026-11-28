@@ -2,7 +2,7 @@
 import { useSyncExternalStore } from "react";
 
 /** A detail page tells the top bar where it sits: "Leads › Momentum Tech Solutions". */
-export type Crumb = { path: string; parent: { href: string; label: string }; label: string };
+export type Crumb = { path: string; parent: { href: string; label: string }; middle?: { href: string; label: string }; label: string };
 
 let current: Crumb | null = null;
 const listeners = new Set<() => void>();

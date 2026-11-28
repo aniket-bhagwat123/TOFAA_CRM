@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ApprovalsCard } from "@/components/crm/approvals-card";
+import { HandoverApprovals, type PendingHandover } from "@/components/orders/handover-approvals";
 import { VoiceTextarea } from "@/components/crm/voice-textarea";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,6 +35,7 @@ export default function ApprovalsPage() {
   const allowed = !!user && isManager(user.role);
   const terms = useApi<TermsItem[]>(allowed ? "/approvals/agreements" : null);
   const discounts = useApi<Approval[]>(allowed ? "/approvals" : null);
+  const handovers = useApi<PendingHandover[]>(allowed ? "/approvals/handovers" : null);
   const [rejecting, setRejecting] = useState<TermsItem | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -58,14 +60,16 @@ export default function ApprovalsPage() {
   }
 
   const loading = (terms.loading && !terms.data) || (discounts.loading && !discounts.data);
-  const empty = terms.data?.length === 0 && (discounts.data?.length ?? 0) === 0;
+  const empty = terms.data?.length === 0 && (discounts.data?.length ?? 0) === 0 && (handovers.data?.length ?? 0) === 0;
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Approvals" description="Agreements with non-standard contract terms wait here for a manager." />
+      <PageHeader title="Approvals" description="Deal handovers and agreements with non-standard contract terms wait here for a manager." />
       {loading && <TableSkeleton columns={4} rows={5} />}
       {terms.error && !terms.data && <StateView kind="error" message={terms.error} onRetry={() => void terms.reload()} />}
-      {empty && <StateView kind="empty" title="Nothing to approve" message="When a KAM changes or adds contract terms in an agreement, it shows up here." />}
+      {empty && <StateView kind="empty" title="Nothing to approve" message="Deal handovers sent for approval and changed contract terms show up here." />}
+
+      {!!handovers.data?.length && <HandoverApprovals items={handovers.data} />}
 
       {!!terms.data?.length && (
         <Card className="space-y-3">

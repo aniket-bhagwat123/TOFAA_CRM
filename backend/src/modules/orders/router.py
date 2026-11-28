@@ -2,6 +2,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
+from src.core.errors import ConflictError
 from src.core.pagination import PageDep
 from src.core.schema import CamelModel, ok
 from src.modules.auth.dependencies import CurrentUserDep
@@ -27,7 +28,7 @@ def create(body: schemas.OrderCreate, user: CurrentUserDep):
     data = body.model_dump(mode="json")
     items = data.pop("items")
     made = flow.create(user, data.pop("company_id"), items, data.pop("transportation"), data.pop("gst_rate"), data)
-    return ok(made, "Order created.")
+    return ok(made, "Deal created.")
 
 
 @router.get("/by-id/{order_id}")
@@ -41,21 +42,23 @@ def update(order_id: str, body: schemas.OrderUpdate, user: CurrentUserDep):
     for k in ("items", "transportation", "gst_rate"):
         if changes.get(k, "") is None:
             del changes[k]
-    return ok(flow.update(user, order_id, changes), "Order saved.")
+    return ok(flow.update(user, order_id, changes), "Deal saved.")
 
 
 @router.post("/by-id/{order_id}/status")
 def change_status(order_id: str, body: schemas.StatusChange, user: CurrentUserDep):
-    return ok(flow.set_status(user, order_id, body.status, body.note), "Order updated.")
+    return ok(flow.set_status(user, order_id, body.status, body.note), "Deal updated.")
 
 
 @router.delete("/by-id/{order_id}")
 def delete(order_id: str, user: CurrentUserDep):
-    return ok(flow.delete(user, order_id), "Order deleted.")
+    return ok(flow.delete(user, order_id), "Deal deleted.")
 
 
 @router.patch("/{lead_id}")
 def set_status(lead_id: str, body: StatusIn, user: CurrentUserDep):
+    if flow.upgraded() and flow._handover_live():
+        raise ConflictError("The status comes from the OMS.")
     return ok(service.set_status(user, lead_id, body.status, (body.note or "").strip()[:500] or None), "Order updated.")
 
 

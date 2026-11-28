@@ -3,11 +3,11 @@ from decimal import Decimal
 
 from src.core.money import to_money
 
-# new (draft) -> ready (released to OMS) -> accepted -> production -> quality_check -> packed -> dispatched -> delivered
+# new (draft) -> ready (handover approved, or released) -> accepted -> production -> quality_check -> packed -> dispatched -> delivered
 FLOW = ["new", "ready", "accepted", "production", "quality_check", "packed", "dispatched", "delivered"]
 STATUSES = [*FLOW, "rejected", "on_hold", "cancelled"]
 LABEL = {
-    "new": "Not started", "ready": "Ready for OMS", "accepted": "Accepted", "rejected": "Rejected", "production": "Production",
+    "new": "Not started", "ready": "Handover Approved", "accepted": "Accepted", "rejected": "Rejected", "production": "Production",
     "quality_check": "Quality check", "packed": "Packed", "dispatched": "Dispatched", "delivered": "Delivered",
     "on_hold": "On hold", "cancelled": "Cancelled",
 }
@@ -15,15 +15,10 @@ ITEMS_LOCKED = {"accepted", "production", "quality_check", "packed", "dispatched
 DELIVERY_LOCKED = {"dispatched", "delivered", "cancelled"}
 DELETABLE = {"new", "ready", "rejected", "cancelled"}  # an order being fulfilled is cancelled first
 
-# What the order management system may do: one step at a time, in order.
-OMS_MOVES = {
-    "ready": {"accepted", "rejected"},
-    "accepted": {"production", "on_hold"},
-    "production": {"quality_check", "on_hold"},
-    "quality_check": {"packed", "production", "on_hold"},  # production again: the check failed
-    "packed": {"dispatched", "on_hold"},
-    "dispatched": {"delivered"},
-}
+def number(order: dict) -> str:
+    """The number people see: the Deal number. Before migration 20261202100000 only the old ORD- number exists.
+    (The `order_number` column stays as the internal key.)"""
+    return order.get("deal_number") or order["order_number"]
 
 
 def crm_moves(current: str, held_from: str | None = None) -> list[str]:
@@ -33,12 +28,6 @@ def crm_moves(current: str, held_from: str | None = None) -> list[str]:
         return ["new"]
     blocked = {current} | ({"cancelled", "on_hold"} if current == "delivered" else set())
     return [s for s in STATUSES if s not in blocked]
-
-
-def oms_moves(current: str, held_from: str | None = None) -> set[str]:
-    if current == "on_hold":
-        return {held_from} if held_from else set()
-    return OMS_MOVES.get(current, set())
 
 
 def missing_for_release(order: dict) -> list[str]:
@@ -62,6 +51,21 @@ def status_patch(order: dict, status: str, now: str) -> dict:
     return patch
 
 
+def priced_details(details: list[dict], quantity, rate: Decimal, amount: Decimal, gst: Decimal) -> list[dict]:
+    """Each item's quantity, amount, GST and total, when every item has its own rate and together they make up the
+    requirement's amount. Otherwise the items share one price and are returned as they are."""
+    if any(d.get("unit_price") is None for d in details):
+        return details
+    pieces = [Decimal(str(quantity)) * Decimal(str(d.get("quantity_per_kit") or 1)) for d in details]
+    amounts = [to_money(q * Decimal(str(d["unit_price"]))) for q, d in zip(pieces, details)]
+    if abs(sum(amounts, Decimal("0")) - amount) > Decimal("1"):  # the requirement was repriced since
+        return details
+    taxes = [to_money(a * rate / 100) for a in amounts]
+    taxes[-1] += gst - sum(taxes, Decimal("0"))  # rounding: the items add up to the requirement exactly
+    return [{**d, "quantity": float(q), "amount": float(a), "gst_amount": float(t), "line_total": float(a + t)}
+            for d, q, a, t in zip(details, pieces, amounts, taxes)]
+
+
 def money(items: list[dict], transportation, gst_rate) -> dict:
     """Each line's amount, GST and total, then the order's. GST is charged on the items plus transportation."""
     rate = Decimal(str(gst_rate or 0))
@@ -69,7 +73,10 @@ def money(items: list[dict], transportation, gst_rate) -> dict:
     for item in items:
         amount = to_money(Decimal(str(item["quantity"])) * Decimal(str(item["unit_price"])))
         gst = to_money(amount * rate / 100)
-        lines.append({**item, "amount": float(amount), "gst_amount": float(gst), "line_total": float(amount + gst)})
+        line = {**item, "amount": float(amount), "gst_amount": float(gst), "line_total": float(amount + gst)}
+        if item.get("details"):
+            line["details"] = priced_details(item["details"], item["quantity"], rate, amount, gst)
+        lines.append(line)
     subtotal = to_money(sum((Decimal(str(x["amount"])) for x in lines), Decimal("0")))
     transport = to_money(Decimal(str(transportation or 0)))
     gst_amount = to_money((subtotal + transport) * rate / 100)

@@ -121,7 +121,7 @@ export function DealPage({ id, area }: { id: string; area: DealArea }) {
           <SamplesCard deal={deal.data} closed={closed} onOpen={() => actions.sampling(target)} />
         )}
         {showAgreement && (
-          <AgreementCard lead={lead} deal={deal.data} closed={closed} onPrepare={() => actions.agreement(target)} onPayment={() => actions.payment(target, deal.data?.agreement.totalAmount ?? deal.data?.value.quoted)} onReload={reloadAll} />
+          <AgreementCard lead={lead} deal={deal.data} closed={closed} onPrepare={() => actions.agreement(target)} onReload={reloadAll} />
         )}
         {lead.notes && (
           <section className="rounded-2xl border border-slate-200/70 bg-white p-4 shadow-sm sm:p-5">

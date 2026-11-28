@@ -87,7 +87,7 @@ export function OrderForm({ order, clients, busy, onCancel, onSubmit }: Props) {
 
       <Card className="space-y-4 p-5">
         <h2 className="text-base font-semibold text-slate-900">Items</h2>
-        {!itemsOpen && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900">Items and prices are locked while this order is being fulfilled.</p>}
+        {!itemsOpen && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-900">Items and prices are locked while this deal is being fulfilled.</p>}
         {rows.map((r, i) => (
           <div key={i} className="space-y-3 rounded-xl border border-slate-200 p-3">
             <div className="grid gap-3 sm:grid-cols-[1fr_7rem_9rem_8rem_auto] sm:items-start">
@@ -118,7 +118,7 @@ export function OrderForm({ order, clients, busy, onCancel, onSubmit }: Props) {
       <Card className="space-y-3 p-5">
         <h2 className="text-base font-semibold text-slate-900">Delivery and billing</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          {deliveryOpen ? <DatePicker label="Delivery date" value={delivery} onChange={setDelivery} /> : <InputField label="Delivery date" disabled value={delivery} onChange={() => undefined} />}
+          {deliveryOpen ? <DatePicker label="Requested Delivery Date" value={delivery} onChange={setDelivery} /> : <InputField label="Requested Delivery Date" disabled value={delivery} onChange={() => undefined} />}
           {field("receiverName", "Receiver name", { disabled: !deliveryOpen })}
           {field("receiverPhone", "Receiver phone", { disabled: !deliveryOpen, maxLength: 25 })}
           {field("billingName", "Billing name", { disabled: !deliveryOpen })}
@@ -143,7 +143,7 @@ export function OrderForm({ order, clients, busy, onCancel, onSubmit }: Props) {
 
       <div className="flex justify-end gap-3">
         <Button type="button" variant="secondary" disabled={busy} onClick={onCancel}>Cancel</Button>
-        <Button type="submit" loading={busy}>{creating ? "Create order" : "Save order"}</Button>
+        <Button type="submit" loading={busy}>{creating ? "Create deal" : "Save deal"}</Button>
       </div>
     </form>
   );
