@@ -1,11 +1,11 @@
-"""The prepared agreement as a PDF, on the same letterhead as the quotation: parties, requirement packages, scope of
-work, commercials, contract terms, remarks and the two signature blocks."""
+"""The prepared agreement as a PDF, on the same letterhead as the quotation: parties, requirement packages (the same
+cards as the quotation), scope of work, commercials, contract terms, remarks and the two signature blocks."""
 from datetime import date
 
 from fpdf.enums import XPos, YPos
 
 from src.core.config import settings
-from src.modules.quotations.pdf import ACCENT, GREY, INK, Letterhead, _money, _package_text, _t
+from src.modules.quotations.pdf import ACCENT, GREY, INK, Letterhead, _money, _package_cards, _t
 
 
 def _heading(pdf: Letterhead, text: str) -> None:
@@ -18,7 +18,14 @@ def _heading(pdf: Letterhead, text: str) -> None:
     pdf.set_text_color(*INK)
 
 
-def render(*, number: str, created: date, lead: dict, details: dict, scope_labels: dict[str, str]) -> bytes:
+def photo_paths(package: dict) -> list[str]:
+    """The package's mockups and its items' photos, each once."""
+    paths = [*(package.get("photos") or []), *[p for item in package.get("items") or [] for p in item.get("photos") or []]]
+    return list(dict.fromkeys(paths))
+
+
+def render(*, number: str, created: date, lead: dict, details: dict, scope_labels: dict[str, str],
+           photos: dict[str, bytes] | None = None) -> bytes:
     pdf = Letterhead()
     pdf.add_page()
 
@@ -53,19 +60,7 @@ def render(*, number: str, created: date, lead: dict, details: dict, scope_label
 
     # requirement packages
     _heading(pdf, "Requirement packages")
-    pdf.set_font("Helvetica", "", 9.5)
-    with pdf.table(col_widths=(8, 86, 20, 34, 42), text_align=("CENTER", "LEFT", "RIGHT", "RIGHT", "RIGHT"), line_height=6, padding=1.6,
-                   borders_layout="HORIZONTAL_LINES") as table:
-        head = table.row()
-        for h in ("#", "Requirement", "Qty", "Rate / unit", "Amount"):
-            head.cell(h)
-        for i, p in enumerate(details.get("packages") or [], 1):
-            row = table.row()
-            row.cell(str(i))
-            row.cell(_package_text(p))
-            row.cell(f"{float(p['quantity']):g}")
-            row.cell(_money(p["unit_price"]))
-            row.cell(_money(float(p["quantity"]) * float(p["unit_price"])))
+    _package_cards(pdf, [{**p, "photo_paths": photo_paths(p)} for p in details.get("packages") or []], photos or {})
 
     # scope of work
     scope = [scope_labels.get(s, s) for s in details.get("scope") or [] if s != "other"]
@@ -85,6 +80,8 @@ def render(*, number: str, created: date, lead: dict, details: dict, scope_label
 
     # commercials
     t = details.get("totals") or {}
+    if pdf.get_y() + 48 > pdf.h - pdf.b_margin:  # keep the figures together, under their heading
+        pdf.add_page()
     _heading(pdf, "Project cost & commercials")
 
     def line(label: str, value: str, bold: bool = False):

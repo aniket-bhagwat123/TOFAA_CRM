@@ -246,7 +246,10 @@ def make_pdf(user: Profile, lead_id: str) -> tuple[bytes, str]:
             status_code=409,
         )
     number = f"A-{lead_id.replace('-', '')[:6].upper()}"
-    data = pdf.render(number=number, created=today_ist(), lead=lead, details=details, scope_labels=schemas.SCOPE)
+    from src.modules.quotations.service import _photo_bytes
+
+    photos = _photo_bytes([{"photo_paths": pdf.photo_paths(p)} for p in details.get("packages") or []])
+    data = pdf.render(number=number, created=today_ist(), lead=lead, details=details, scope_labels=schemas.SCOPE, photos=photos)
     return data, number
 
 

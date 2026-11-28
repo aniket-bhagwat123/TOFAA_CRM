@@ -198,15 +198,6 @@ def _money(v) -> str:
     return format_inr(v, symbol="Rs. ", paise=True)
 
 
-def _package_text(p: dict) -> str:
-    """The package name, then one line per item inside it (used by the agreement PDF)."""
-    lines = [_t(p["name"])]
-    for it in p.get("items") or []:
-        desc = f": {it['description']}" if it.get("description") else ""
-        lines.append(_t(f"  - {it['name']}{desc}"))
-    return "\n".join(lines)
-
-
 # --- the table -----------------------------------------------------------------------------------------------------
 
 COLS = (9, None, 20, 34, 37)  # #, requirement (the rest), qty, rate / unit, amount (mm)
@@ -377,24 +368,27 @@ def _spaced(pdf: FPDF, text: str, size: float, style: str = "B", spacing: float 
     return w
 
 
-def _card_rows(pdf: FPDF, p: dict, spec_w: float) -> list[tuple[str, str, list[str], float]]:
-    """(no., item, spec lines, row height) for each item in the package."""
-    pdf.set_font("Helvetica", "", 8.5)
+def _card_rows(pdf: FPDF, p: dict, name_w: float, spec_w: float, start: int) -> list[tuple[str, list[str], list[str], float]]:
+    """(no., item name lines, spec lines, row height) for each item in the package. Long text wraps, nothing is cut."""
+    def wrap(text: str, width: float, style: str) -> list[str]:
+        pdf.set_font("Helvetica", style, 8.5)
+        return pdf.multi_cell(width - 4, 4.4, text, dry_run=True, output="LINES") or [text]
+
     rows = []
-    for i, it in enumerate(p.get("items") or [], 1):
-        spec = _t(it.get("description") or DEFAULT_SPEC)
-        lines = pdf.multi_cell(spec_w - 4, 4.4, spec, dry_run=True, output="LINES") or [spec]
-        rows.append((f"{i:02d}", _t(it["name"]), lines, max(ROW_MIN, len(lines) * 4.4 + 2.8)))
+    for i, it in enumerate(p.get("items") or [], start):
+        name = wrap(_t(it["name"]), name_w, "B")
+        spec = wrap(_t(it.get("description") or DEFAULT_SPEC), spec_w, "")
+        rows.append((f"{i:02d}", name, spec, max(ROW_MIN, max(len(name), len(spec)) * 4.4 + 2.8)))
     return rows
 
 
-def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes]) -> None:
+def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes], start: int = 1, last: bool = True) -> None:
     """One requirement as a card: PACKAGE pill, name and figures on top; its items as a small table; its mockups
     (or the sample sign-off note) at the bottom. Kept on one page."""
     x, w = pdf.l_margin, pdf.epw
     inner_x, inner_w = x + 5, w - 10
-    cols = (14, 52, inner_w - 66)  # sr., item name, specifications & finish
-    rows = _card_rows(pdf, p, cols[2])
+    cols = (14, 58, inner_w - 72)  # sr., item name, specifications & finish
+    rows = _card_rows(pdf, p, cols[1], cols[2], start)
     imgs = [photos[k] for k in (p.get("photo_paths") or []) if k in photos]
     per_row = max(1, int((inner_w + 3) // (THUMB + 3)))
     photo_h = ((len(imgs) + per_row - 1) // per_row) * (THUMB + 3) - 3 if imgs else 9
@@ -402,7 +396,7 @@ def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes]) -> None:
 
     # The head: pill + name on the left; on the right three compact figure blocks (small label above, value below),
     # split by thin dividers. Narrow enough that name and figures share one line; a long name wraps in its own space.
-    pill = f"PACKAGE {n:02d}"
+    pill = f"PACKAGE {n:02d}"  # the same on a continued card: the item numbers show it carries on
     pill_w = _spaced(pdf, pill, 7.5) + 5
     qty, rate = float(p["quantity"]), p["unit_price"]
     parts = [("VOLUME", f"{qty:,g} pcs", SLATE), ("RATE / UNIT", _money(rate), SLATE), ("PACKAGE TOTAL", _money(qty * float(rate)), GOLD)]
@@ -419,7 +413,14 @@ def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes]) -> None:
     name_lines = name_lines[:2] if len(name_lines) <= 2 else [name_lines[0], name_lines[1][: max(1, len(name_lines[1]) - 3)] + "..."]
     head_h = max(CARD_HEAD + 2, len(name_lines) * 5.4 + 6)
 
-    height = head_h + CARD_PAD + (6 + table_h + CARD_PAD if rows else 0) + 0.3 + CARD_PAD + photo_h + CARD_PAD
+    foot_h = 0.3 + CARD_PAD + photo_h + CARD_PAD if last else 0  # mockups close the package's last card
+    height = head_h + CARD_PAD + (6 + table_h + CARD_PAD if rows else 0) + foot_h
+    if height > pdf.h - pdf.t_margin - pdf.b_margin and len(rows) > 1:  # too long for one page: continue on another card
+        items = p["items"]
+        half = len(items) // 2
+        _package_card(pdf, n, {**p, "items": items[:half]}, photos, start, last=False)
+        _package_card(pdf, n, {**p, "items": items[half:]}, photos, start + half, last)
+        return
     if pdf.get_y() + height > pdf.h - pdf.b_margin:
         pdf.add_page()
     y = pdf.get_y()
@@ -498,13 +499,16 @@ def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes]) -> None:
             pdf.set_char_spacing(0)
             hx += cw
         cy += 7
-        for no, item, lines, rh in rows:
+        for no, names, lines, rh in rows:
             pdf.set_xy(inner_x, cy)
             pdf.set_font("Helvetica", "B", 8.5)
             pdf.set_text_color(*SLATE)
             pdf.cell(cols[0], ROW_MIN, no, align="C")
-            pdf.set_xy(inner_x + cols[0] + 3, cy)
-            pdf.cell(cols[1] - 4, ROW_MIN, item if pdf.get_string_width(item) < cols[1] - 4 else item[:28] + "...")
+            ny = cy + (ROW_MIN - 4.4) / 2 if len(names) == 1 else cy + 1.4
+            for ln in names:
+                pdf.set_xy(inner_x + cols[0] + 3, ny)
+                pdf.cell(cols[1] - 4, 4.4, ln)
+                ny += 4.4
             pdf.set_font("Helvetica", "", 8.5)
             pdf.set_text_color(51, 65, 85)
             ly = cy + (ROW_MIN - 4.4) / 2 if len(lines) == 1 else cy + 1.4
@@ -518,6 +522,9 @@ def _package_card(pdf: FPDF, n: int, p: dict, photos: dict[str, bytes]) -> None:
         cy += CARD_PAD
 
     # bottom: mockups, or the sample sign-off note
+    if not last:
+        pdf.set_xy(x, y + height + 5)
+        return
     pdf.set_draw_color(*LINE)
     pdf.line(x, cy, x + w, cy)
     cy += CARD_PAD
